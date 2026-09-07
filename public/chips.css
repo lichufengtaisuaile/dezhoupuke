@@ -1,0 +1,477 @@
+.auto-next-control {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 16px 0 10px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.auto-next-control input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--green);
+}
+
+.chip-pile {
+  --chip-size: 17px;
+  --chip-step: 9px;
+  --chip-rise: 2.5px;
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 22px;
+  vertical-align: middle;
+  pointer-events: none;
+  isolation: isolate;
+}
+
+.poker-chip {
+  --chip-color: #167d79;
+  --chip-edge: #08413f;
+  --chip-stripe: #e2f0db;
+  --chip-ink: #f8fff4;
+  position: absolute;
+  display: block;
+  left: calc(var(--chip-column, 0) * var(--chip-step, 9px));
+  bottom: 1px;
+  width: var(--chip-size, 17px);
+  height: var(--chip-size, 17px);
+  border: 1px solid var(--chip-edge);
+  border-radius: 50%;
+  background: repeating-conic-gradient(
+    from 8deg,
+    var(--chip-color) 0deg 24deg,
+    var(--chip-stripe) 24deg 37deg,
+    var(--chip-color) 37deg 60deg
+  );
+  box-shadow:
+    inset 0 1px 0 #ffffff78,
+    0 1px 0 var(--chip-edge),
+    0 2px 0 var(--chip-color),
+    0 3px 0 var(--chip-edge),
+    1px 5px 3px #091b1959;
+  transform: translateY(calc(var(--chip-index, 0) * var(--chip-rise, 2.5px) * -1))
+    rotateX(24deg) rotate(calc(var(--chip-column, 0) * 13deg));
+  transform-origin: center;
+  z-index: calc(var(--chip-index, 0) + 1);
+  user-select: none;
+}
+
+.poker-chip .chip-face {
+  position: absolute;
+  inset: 3px;
+  display: grid;
+  place-items: center;
+  border: 0.7px solid var(--chip-stripe);
+  border-radius: 50%;
+  background: var(--chip-color);
+  color: var(--chip-ink);
+  box-shadow: 0 0 0 0.6px var(--chip-color), inset 0 1px 2px #ffffff24;
+  font-family: Arial, sans-serif;
+  font-size: 5px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0;
+  text-align: center;
+  text-shadow: 0 1px 1px #0003;
+}
+
+.chip-ivory {
+  --chip-color: #e7e6da;
+  --chip-edge: #8f9894;
+  --chip-stripe: #536c86;
+  --chip-ink: #334653;
+}
+
+.chip-ruby {
+  --chip-color: #c64b59;
+  --chip-edge: #6f2532;
+  --chip-stripe: #f6e8d9;
+  --chip-ink: #fff4e9;
+}
+
+.chip-teal {
+  --chip-color: #219690;
+  --chip-edge: #11504b;
+  --chip-stripe: #d9eee1;
+  --chip-ink: #f4fff1;
+}
+
+.chip-ink {
+  --chip-color: #3d4553;
+  --chip-edge: #151d27;
+  --chip-stripe: #d9dfec;
+  --chip-ink: #f6f0e0;
+}
+
+.chip-gold {
+  --chip-color: #d8ac54;
+  --chip-edge: #846025;
+  --chip-stripe: #fff0c5;
+  --chip-ink: #49351c;
+}
+
+.pile-pot {
+  --chip-size: 22px;
+  --chip-step: 26px;
+  --chip-rise: 2.6px;
+  width: 90px;
+  height: 32px;
+  margin-left: 1px;
+}
+
+.pile-pot .poker-chip {
+  margin-left: 6px;
+  bottom: 2px;
+}
+
+.pile-pot .chip-face {
+  inset: 3.5px;
+  font-size: 6.5px;
+}
+
+.pile-bet {
+  --chip-size: 16px;
+  --chip-step: 9px;
+  --chip-rise: 2px;
+  width: 36px;
+  height: 23px;
+}
+
+.pile-bank {
+  --chip-size: 16px;
+  --chip-step: 10px;
+  --chip-rise: 1.8px;
+  width: 40px;
+  height: 22px;
+}
+
+.seat-bank {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 20px;
+  min-width: 0;
+}
+
+.seat-bank .seat-stack {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.pot-display {
+  gap: 8px;
+  min-height: 32px;
+  max-width: 100%;
+  white-space: nowrap;
+}
+
+.pot-display strong {
+  min-width: 2ch;
+  max-width: 8ch;
+  text-align: right;
+}
+
+.seat .seat-bet,
+.seat:has(.seat-cards:not(:empty)) .seat-bet {
+  top: 16px;
+  left: calc(100% + 7px);
+  transform: none;
+  gap: 4px;
+}
+
+.seat.position-4 .seat-bet,
+.seat.position-5 .seat-bet,
+.seat.position-4:has(.seat-cards:not(:empty)) .seat-bet,
+.seat.position-5:has(.seat-cards:not(:empty)) .seat-bet {
+  left: auto;
+  right: calc(100% + 7px);
+  flex-direction: row-reverse;
+}
+
+.bet-amount {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+  line-height: 14px;
+  letter-spacing: 0;
+  text-shadow: 0 1px 2px #102b24;
+}
+
+.chips-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 11;
+  pointer-events: none;
+}
+
+.chip-flight {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  pointer-events: none;
+  transform-origin: center;
+  will-change: transform, opacity;
+}
+
+.chip-flight .poker-chip {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  transform: rotateX(24deg);
+  box-shadow:
+    inset 0 1px 0 #ffffff78,
+    0 1px 0 var(--chip-edge),
+    0 2px 0 var(--chip-color),
+    0 3px 0 var(--chip-edge),
+    2px 7px 5px #071f225e;
+}
+
+.chip-flight .chip-face {
+  inset: 3.5px;
+  font-size: 6px;
+}
+
+.chip-gain {
+  position: absolute;
+  color: #ffe1a2;
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 25px;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-shadow: 0 2px 3px #14251c, 0 0 8px #14251c;
+  pointer-events: none;
+  animation: chip-gain-rise 1500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.chip-impact {
+  position: absolute;
+  width: 37px;
+  height: 18px;
+  border: 1px solid #efddb2;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  animation: chip-impact-spread 420ms ease-out both;
+}
+
+.seat.payout-active .seat-body {
+  animation: chip-payout-rim 1450ms ease-out both;
+}
+
+.seat.all-in-active .seat-body {
+  animation: chip-all-in-rim 1050ms ease-out both;
+}
+
+.chip-money {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.chip-money.changed,
+.chip-money.money-changed {
+  animation: chip-number-tick 550ms ease-out;
+}
+
+.pot-display.pot-active strong {
+  animation: chip-number-tick 550ms ease-out;
+}
+
+@keyframes chip-gain-rise {
+  0% { opacity: 0; transform: translate(-50%, -25%) scale(0.85); }
+  18% { opacity: 1; transform: translate(-50%, -70%) scale(1.06); }
+  45% { opacity: 1; transform: translate(-50%, -85%) scale(1); }
+  78% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -155%) scale(1); }
+}
+
+@keyframes chip-impact-spread {
+  0% { opacity: 0.75; transform: translate(-50%, -50%) scale(0.3); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.4); }
+}
+
+@keyframes chip-payout-rim {
+  0%, 18% {
+    border-color: #ffe4a4;
+    box-shadow: 0 0 0 3px #e4c48855, inset 0 0 15px #e4c48817;
+  }
+  100% {
+    border-color: var(--gold);
+    box-shadow: 0 0 0 2px #e4c48823;
+  }
+}
+
+@keyframes chip-all-in-rim {
+  0%, 18% {
+    border-color: #e59277;
+    box-shadow: 0 0 0 2px #dd725541, inset 0 0 12px #dd72551a;
+  }
+  100% {
+    border-color: #bfa373;
+    box-shadow: 0 0 0 1px #bfa37322;
+  }
+}
+
+@keyframes chip-number-tick {
+  0%, 25% { color: #fff4d7; text-shadow: 0 0 9px #e4c48865; }
+  100% { text-shadow: none; }
+}
+
+@media (max-width: 1130px) {
+  .pile-bank {
+    --chip-size: 14px;
+    --chip-step: 8px;
+    width: 31px;
+  }
+
+  .seat-bank {
+    gap: 3px;
+  }
+
+  .seat .seat-bet,
+  .seat:has(.seat-cards:not(:empty)) .seat-bet {
+    left: calc(100% + 4px);
+  }
+
+  .seat.position-4 .seat-bet,
+  .seat.position-5 .seat-bet,
+  .seat.position-4:has(.seat-cards:not(:empty)) .seat-bet,
+  .seat.position-5:has(.seat-cards:not(:empty)) .seat-bet {
+    left: auto;
+    right: calc(100% + 4px);
+  }
+}
+
+@media (max-width: 850px) {
+  .seat .seat-bet,
+  .seat:has(.seat-cards:not(:empty)) .seat-bet,
+  .seat.position-4 .seat-bet,
+  .seat.position-5 .seat-bet,
+  .seat.position-4:has(.seat-cards:not(:empty)) .seat-bet,
+  .seat.position-5:has(.seat-cards:not(:empty)) .seat-bet {
+    flex-direction: column;
+    top: 7px;
+    gap: 0;
+    min-width: 34px;
+  }
+}
+
+@media (max-width: 680px) {
+  .pile-pot {
+    --chip-size: 20px;
+    --chip-step: 23px;
+    --chip-rise: 2px;
+    width: 76px;
+    height: 28px;
+    margin-left: 0;
+  }
+
+  .pile-pot .poker-chip {
+    margin-left: 3px;
+  }
+
+  .pile-pot .chip-face {
+    font-size: 6px;
+  }
+
+  .pile-bet {
+    --chip-size: 14px;
+    --chip-step: 7px;
+    --chip-rise: 1.8px;
+    width: 28px;
+    height: 20px;
+  }
+
+  .pile-bank {
+    --chip-size: 12px;
+    --chip-step: 7px;
+    --chip-rise: 1.5px;
+    width: 27px;
+    height: 19px;
+  }
+
+  .pile-bank .chip-face {
+    inset: 2px;
+    font-size: 4px;
+  }
+
+  .seat-bank {
+    height: 18px;
+    gap: 3px;
+  }
+
+  .seat .seat-bet,
+  .seat:has(.seat-cards:not(:empty)) .seat-bet {
+    top: 6px;
+    min-width: 30px;
+  }
+
+  .bet-amount {
+    font-size: 9px;
+    line-height: 12px;
+  }
+
+  .pot-display {
+    min-height: 28px;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+
+  .pot-display strong {
+    font-size: 22px;
+  }
+
+  .chip-gain {
+    font-size: 16px;
+    line-height: 22px;
+  }
+}
+
+@media (max-width: 360px) {
+  .seat-bank {
+    gap: 2px;
+  }
+
+  .pile-bank {
+    --chip-step: 6px;
+    width: 24px;
+  }
+
+  .seat-bank .seat-stack {
+    font-size: 11px;
+  }
+
+  .pot-display {
+    gap: 5px;
+  }
+
+  .pot-display strong {
+    font-size: 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chip-flight,
+  .chip-impact,
+  .chip-gain {
+    display: none;
+  }
+
+  .seat.payout-active .seat-body,
+  .seat.all-in-active .seat-body,
+  .chip-money.changed,
+  .chip-money.money-changed,
+  .pot-display.pot-active strong {
+    animation: none;
+  }
+}

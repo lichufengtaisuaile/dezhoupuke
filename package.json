@@ -1,0 +1,22 @@
+{
+  "name": "lan-holdem",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local network Texas Hold'em for friends",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "express": "5.1.0",
+    "lucide": "0.468.0",
+    "poker-ts": "1.5.0",
+    "pokersolver": "2.1.4",
+    "socket.io": "4.8.1"
+  },
+  "devDependencies": {
+    "socket.io-client": "4.8.1"
+  }
+}

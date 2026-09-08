@@ -1,0 +1,35 @@
+.seat-avatar {
+  position: absolute;
+  left: -7px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 4;
+  display: block;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  padding: 0;
+  border: 1px solid #c3cbd0;
+  border-radius: 50%;
+  background: #343b3d;
+  box-shadow: 0 2px 5px #0005;
+  cursor: pointer;
+}
+.seat-avatar img { display: block; width: 100%; height: 100%; border-radius: inherit; object-fit: cover; pointer-events: none; }
+.seat-avatar:not(.is-self):hover, .seat-avatar[aria-expanded="true"] { border-color: #f4d288; box-shadow: 0 0 0 2px #f4d28840; }
+.seat-avatar.is-self { cursor: default; }
+.seat-avatar:focus-visible { outline: 2px solid #f4d288; outline-offset: 3px; }
+.seat-details { min-width: 0; padding-left: 19px; }
+.seat-details .seat-name > span { min-width: 0; }
+.roster-player > .seat-avatar { position: static; transform: none; width: 30px; height: 30px; flex-basis: 30px; }
+.social-picker.avatar-picker { position: fixed; right: auto; bottom: auto; width: 312px; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); overflow-y: auto; z-index: 40; }
+@media (max-width: 680px) {
+  .seat-avatar { width: 22px; height: 22px; flex-basis: 22px; }
+  .seat-details { padding-left: 13px; }
+  .seat .seat-remove { bottom: -17px; }
+  .seat-details .pile-bank { --chip-size: 10px; --chip-step: 5px; width: 20px; }
+  .roster-player > .seat-avatar { width: 26px; height: 26px; flex-basis: 26px; }
+}
+@media (max-width: 360px) {
+  .seat-details .pile-bank { --chip-step: 4px; width: 18px; }
+}

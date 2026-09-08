@@ -1,0 +1,44 @@
+.sound-controls { display: flex; align-items: center; gap: 3px; }
+.sound-controls input { width: 62px; accent-color: var(--green); cursor: pointer; margin: 0; }
+.sound-controls button[aria-pressed="true"] { color: var(--green); }
+.self-hand-panel { display: flex; align-items: center; gap: 20px; padding: 12px 0; border-top: 1px solid var(--line); }
+.own-hole-cards, .winner-hole, .winner-best { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+.hand-label { color: var(--muted); font-size: 10px; line-height: 1.4; }
+.hand-mini-cards { display: flex; gap: 4px; }
+.hand-mini-cards .playing-card { width: 32px; height: 43px; flex-basis: 32px; border-radius: 3px; }
+.hand-mini-cards .card-corner { left: 3px; top: 3px; }
+.hand-mini-cards .card-rank { font-size: 12px; }
+.hand-mini-cards .card-suit { font-size: 10px; }
+.hand-mini-cards .card-symbol { font-size: 16px; right: 3px; bottom: 3px; }
+.hand-mini-cards .playing-card.back::after { font-size: 16px; inset: 3px; }
+.hand-description { display: flex; flex-direction: column; min-width: 0; gap: 4px; }
+.hand-description > strong { font-size: 16px; font-weight: 600; color: var(--gold); }
+.hand-detail { font-size: 11px; color: #bccac1; line-height: 1.6; overflow-wrap: anywhere; }
+.result-panel { flex-direction: column; align-items: stretch; gap: 0; padding: 0; background: transparent; border: 0; border-radius: 0; }
+.winner-result { padding: 14px 0; border-top: 1px solid var(--line); }
+.winner-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 13px; }
+.winner-summary > svg { width: 17px; height: 17px; color: var(--gold); flex-shrink: 0; }
+.winner-name { min-width: 0; overflow-wrap: anywhere; }
+.winner-amount { color: var(--gold); white-space: nowrap; }
+.winner-reason { color: var(--muted); font-size: 11px; margin-left: auto; }
+.winner-hand { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 18px; margin-top: 12px; }
+.winner-hand > .hand-description { flex: 1; }
+.winner-best { margin-left: auto; }
+.show-cards-row { display: flex; justify-content: flex-end; padding: 0 0 14px; }
+@media (max-width: 850px) {
+  .winner-best { width: 100%; margin-left: 0; }
+}
+@media (max-width: 600px) {
+  .sound-controls input { width: 40px; }
+  .sound-controls .icon-button { width: 29px; height: 29px; padding: 6px; }
+  .self-hand-panel { gap: 14px; padding: 10px 0; }
+  .hand-mini-cards .playing-card { width: 28px; height: 38px; flex-basis: 28px; }
+  .winner-summary { gap: 6px; }
+  .winner-hand { gap: 10px 14px; }
+  .winner-result { padding: 12px 0; }
+  .winner-reason { font-size: 10px; }
+}
+@media (max-width: 360px) {
+  .brand-sub { display: none; }
+  .sound-controls input { width: 34px; }
+}

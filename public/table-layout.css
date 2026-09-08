@@ -1,0 +1,260 @@
+/* The table and action dock keep their size as turns and panels change. */
+body.in-room { background: #12191b; }
+body.in-room .app-shell { height: 100dvh; min-height: 640px; max-width: none; display: flex; flex-direction: column; }
+body.in-room .topbar { height: 58px; flex: 0 0 58px; margin: 0; padding: 0 28px; background: #192124; border-color: #344144; }
+body.in-room .brand-mark { width: 30px; height: 34px; font-size: 27px; }
+body.in-room .brand strong { font-size: 20px; }
+body.in-room .topbar-right { gap: 16px; }
+body.in-room .workspace { display: flex; flex: 1; min-height: 0; padding: 0; gap: 0; }
+body.in-room .game-area { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; padding: 0; }
+body.in-room .table-topline { height: 44px; flex: 0 0 44px; padding: 0 28px; border-bottom: 1px solid #2a383a; background: #172023; }
+body.in-room .table-ident { font-size: 12px; gap: 12px; }
+body.in-room #table-room-code { font-weight: 600; color: #d8e0dc; }
+body.in-room #table-blinds { color: #92aba1; }
+body.in-room .hand-status { font-size: 11px; gap: 10px; }
+body.in-room .round-badge { background: transparent; border: 0; padding: 0; color: var(--green); }
+body.in-room .table-stage { flex: 1; min-height: 350px; height: auto; max-width: 1120px; width: calc(100% - 100px); margin: 0 auto; }
+body.in-room .poker-table { inset: 13% 7% 12%; border-radius: 46%; background: #1c6552; border: 9px solid #263735; box-shadow: 0 0 0 1px #5d8071, inset 0 0 0 1px #91b39c55, inset 0 0 50px #073f3670, 0 12px 28px #0005; }
+body.in-room .felt-border { inset: 12px; border-radius: 46%; border-color: #94b5954f; }
+body.in-room .felt-print { top: 72%; opacity: .15; }
+body.in-room .felt-print > span { font-size: 24px; }
+body.in-room .card-deck { left: 36%; top: 30%; width: 25px; height: 34px; }
+body.in-room .table-center { top: 47%; width: 58%; }
+body.in-room .board { gap: 7px; min-height: 75px; }
+body.in-room .board .playing-card { width: 53px; height: 75px; }
+body.in-room .pot-display { gap: 8px; margin-bottom: 12px; min-height: 28px; }
+body.in-room .pot-display strong { font-size: 25px; }
+body.in-room .center-message { margin-top: 10px; font-size: 11px; max-width: 100%; }
+body.in-room .side-pots { margin-top: 3px; }
+body.in-room .seat { width: 132px; height: 56px; transform: translate(-50%, -50%); }
+body.in-room .seat.position-0 { left: 50%; top: 89%; width: 238px; }
+body.in-room .seat.position-1 { left: 12%; top: 67%; }
+body.in-room .seat.position-2 { left: 17%; top: 27%; }
+body.in-room .seat.position-3 { left: 50%; top: 17%; }
+body.in-room .seat.position-4 { left: 83%; top: 27%; }
+body.in-room .seat.position-5 { left: 88%; top: 67%; }
+body.in-room .seat-body { min-height: 0; height: 56px; border-radius: 6px; padding: 8px 6px 8px 44px; background: #192c2b; border: 1px solid #49655a; box-shadow: 0 3px 8px #0004; }
+body.in-room .seat.self .seat-body { width: 126px; background: #253d35; border-color: #7baf8f; }
+body.in-room .seat.active .seat-body { border-color: #8be6b4; box-shadow: 0 0 0 2px #72c99d38; }
+body.in-room .seat.winner .seat-body { border-color: var(--gold); background: #354332; }
+body.in-room .seat-avatar { left: -3px; top: 50%; width: 44px; height: 44px; }
+body.in-room button.seat-avatar::after { content: ""; position: absolute; width: 44px; height: 44px; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+body.in-room .seat-details { padding: 0; }
+body.in-room .seat-name { justify-content: flex-start; font-size: 12px; gap: 3px; line-height: 18px; }
+body.in-room .seat-name > svg { display: none; }
+body.in-room .seat-bank { justify-content: flex-start; gap: 0; height: 19px; }
+body.in-room .seat-bank .pile-bank { display: none; }
+body.in-room .seat-bank .seat-stack { font-size: 14px; line-height: 19px; color: #ead398; }
+body.in-room .seat .seat-status { top: calc(100% + 4px); bottom: auto; left: 50%; font-size: 10px; max-width: 150%; }
+body.in-room .seat.self .seat-status { display: none; }
+body.in-room .seat .seat-remove { display: none; }
+body.in-room .seat .seat-cards { position: absolute; top: auto; bottom: calc(100% - 5px); left: 50%; right: auto; width: max-content; transform: translateX(-50%); margin: 0; z-index: 1; gap: 2px; }
+body.in-room .seat .seat-cards .playing-card { width: 28px; height: 38px; }
+body.in-room .seat .seat-cards .card-rank { font-size: 12px; }
+body.in-room .seat .seat-cards .card-suit { font-size: 9px; }
+body.in-room .seat .seat-cards .card-symbol { font-size: 17px; right: 3px; bottom: 3px; }
+body.in-room .seat.self .seat-cards { left: 137px; top: -8px; bottom: auto; transform: none; gap: 4px; }
+body.in-room .seat.self .seat-cards .playing-card { width: 45px; height: 64px; }
+body.in-room .seat.self .seat-cards .card-rank { font-size: 18px; }
+body.in-room .seat.self .seat-cards .card-suit { font-size: 12px; }
+body.in-room .seat.self .seat-cards .card-symbol { font-size: 29px; }
+body.in-room .seat .seat-bet,
+body.in-room .seat:has(.seat-cards:not(:empty)) .seat-bet { left: calc(100% + 8px); right: auto; top: 18px; bottom: auto; transform: none; flex-direction: row; min-width: 0; }
+body.in-room .seat.position-4 .seat-bet,
+body.in-room .seat.position-5 .seat-bet,
+body.in-room .seat.position-4:has(.seat-cards:not(:empty)) .seat-bet,
+body.in-room .seat.position-5:has(.seat-cards:not(:empty)) .seat-bet { right: calc(100% + 8px); left: auto; flex-direction: row-reverse; }
+body.in-room .seat.position-0 .seat-bet,
+body.in-room .seat.position-0:has(.seat-cards:not(:empty)) .seat-bet { left: 50%; right: auto; top: -36px; transform: translateX(-50%); }
+body.in-room .seat.position-3 .seat-bet,
+body.in-room .seat.position-3:has(.seat-cards:not(:empty)) .seat-bet { left: calc(100% + 8px); right: auto; top: 8px; transform: none; }
+body.in-room .empty-avatar { width: 35px; height: 35px; background: #173b3122; border-color: #647f7266; }
+body.in-room .seat-empty { opacity: .65; gap: 4px; }
+body.in-room .game-bottom { position: relative; z-index: 20; flex: 0 0 174px; height: 174px; width: 100%; padding: 0 max(28px, calc((100% - 940px) / 2)); border-top: 1px solid #3f5851; background: #1a2527; }
+body.in-room .hand-strip { height: 45px; display: flex; align-items: center; min-width: 0; }
+body.in-room .self-hand-panel { border: 0; padding: 0; width: 100%; }
+body.in-room .own-hole-cards { display: none; }
+body.in-room .self-hand-panel .hand-description { display: flex; flex-direction: row; align-items: center; gap: 10px; width: 100%; }
+body.in-room .self-hand-panel .hand-description > strong { font-size: 15px; white-space: nowrap; }
+body.in-room .self-hand-panel .hand-detail { font-size: 11px; color: #a9beb5; }
+body.in-room .table-ready { color: #a9bcb5; font-size: 12px; }
+body.in-room .settlement-strip { display: flex; align-items: center; width: 100%; gap: 8px; }
+body.in-room #settlement-summary { display: flex; align-items: center; flex: 1; min-width: 0; gap: 8px; font-size: 12px; }
+body.in-room .settlement-text { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+body.in-room .settlement-text strong { font-size: 12px; color: var(--gold); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+body.in-room .settlement-text span { font-size: 10px; color: #b0c1b8; }
+body.in-room .settlement-strip .hand-mini-cards .playing-card { width: 24px; height: 33px; flex-basis: 24px; }
+body.in-room .action-panel { position: relative; margin: 0; padding: 0; border: 0; }
+body.in-room .action-status { height: 28px; min-height: 0; padding: 0; margin: 0; display: flex; align-items: center; justify-content: space-between; }
+body.in-room .your-stack { gap: 7px; align-items: center; }
+body.in-room .your-stack > svg { height: 16px; width: 16px; }
+body.in-room .your-stack > div { display: flex; flex-direction: row; align-items: baseline; gap: 8px; }
+body.in-room .your-stack span { font-size: 10px; }
+body.in-room .your-stack strong { font-size: 14px; }
+body.in-room .turn-message { font-size: 11px; gap: 8px; }
+body.in-room .countdown { font-size: 12px; width: 30px; padding: 0; text-align: right; }
+body.in-room .betting-controls { display: block; margin: 0; }
+body.in-room .action-buttons { display: grid; grid-template-columns: 1fr 1.4fr 1.4fr 1fr; gap: 8px; margin: 0; }
+body.in-room .action-buttons .button { height: 48px; min-height: 48px; padding: 6px 10px; font-size: 14px; grid-column: auto; }
+body.in-room .button.fold { background: #303b3d; border-color: #455255; color: #c6d1cd; }
+body.in-room .button.all-in { background: #593440; border-color: #8e5361; color: #f7c7d0; }
+body.in-room .idle-controls { display: flex; height: 48px; align-items: stretch; gap: 8px; }
+body.in-room .idle-controls .button { min-height: 44px; padding: 8px 18px; }
+body.in-room #idle-message { align-self: center; font-size: 12px; color: #859f94; }
+body.in-room .show-cards-row { padding: 0; }
+body.in-room .social-bar { padding: 0; border: 0; height: 44px; display: flex; align-items: center; gap: 18px; }
+body.in-room .social-toolbar { flex: 0 0 auto; gap: 14px; }
+body.in-room .social-heading { display: none; }
+body.in-room .social-commands { gap: 8px; width: auto; }
+body.in-room .social-feed { padding: 0; min-height: 0; font-size: 10px; flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+body.in-room .table-footnote { display: none; }
+body.in-room .social-picker { bottom: calc(100% + 8px); right: auto; left: 0; max-width: calc(100vw - 24px); }
+body.in-room .social-picker.avatar-picker { bottom: auto; width: 260px; }
+body.in-room .raise-control { position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 14px 20px; margin: 0; padding: 18px; background: #22322f; border: 1px solid #628475; border-radius: 8px; box-shadow: 0 -6px 24px #0005; z-index: 35; }
+body.in-room .raise-heading { display: flex; align-items: center; justify-content: space-between; grid-column: 1/-1; font-size: 14px; }
+body.in-room .raise-label { margin: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+body.in-room .raise-input-wrap input { height: 40px; width: 100px; font-size: 18px; }
+body.in-room .raise-input-wrap > span { display: none; }
+body.in-room #raise-slider { width: 100%; margin: 0; height: 32px; accent-color: var(--green); }
+body.in-room .raise-presets { grid-column: 1; display: grid; grid-template-columns: repeat(4,1fr); gap: 5px; margin: 0; }
+body.in-room .raise-presets button { height: 38px; min-width: 0; padding: 4px; font-size: 11px; }
+body.in-room #raise-button { grid-column: 2; height: 42px; }
+.table-overlay-backdrop { position: fixed; inset: 0; background: #071010aa; z-index: 60; }
+body.in-room #room-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 340px; max-width: calc(100% - 24px); padding: 24px; background: #1c282a; border: 0; z-index: 61; overflow-y: auto; display: block; }
+body.in-room #room-drawer .drawer-heading { padding: 0 0 22px; margin: 0; }
+body.in-room #room-drawer .eyebrow, body.in-room #room-drawer .sidebar-bottom { display: none; }
+body.in-room #room-drawer .room-title { margin: 0; padding: 0; }
+body.in-room #room-drawer .room-title h1 { font-size: 18px; }
+body.in-room #room-drawer .invite-actions { display: flex; position: static; margin: 20px 0; }
+body.in-room #room-drawer .section-label { display: flex; }
+body.in-room #room-drawer .roster { display: flex; margin: 18px 0; gap: 18px; }
+body.in-room #room-drawer .roster-player > .seat-avatar { position: static; width: 36px; height: 36px; flex-basis: 36px; transform: none; }
+body.in-room #room-drawer .host-actions { display: flex; flex-direction: column; gap: 10px; }
+body.in-room #room-drawer .auto-next-control { display: flex; margin: 22px 0 16px; }
+body.in-room #room-drawer .network-panel { margin-top: 25px; display: block; padding: 16px 0; }
+body.in-room #room-drawer .network-addresses { text-align: left; }
+body.in-room #room-drawer .network-panel .section-label { font-size: 11px; margin-bottom: 8px; }
+body.in-room #result-drawer { position: fixed; z-index: 61; width: 500px; max-width: calc(100% - 24px); max-height: calc(100dvh - 48px); top: 50%; left: 50%; transform: translate(-50%,-50%); overflow-y: auto; padding: 22px; border: 1px solid #536a60; border-radius: 8px; background: #1c282a; }
+body.in-room #result-drawer .drawer-heading { margin: 0; padding: 0 0 14px; }
+body.in-room #result-drawer .winner-best { width: 100%; margin: 0; }
+body.in-room .history-drawer { z-index: 71; background: #1c282a; }
+body.in-room #history-backdrop { z-index: 70; }
+@media (max-width: 680px) {
+  body.in-room .app-shell { min-height: 568px; }
+  body.in-room .topbar { height: 46px; flex-basis: 46px; padding: 0 14px; }
+  body.in-room .brand { gap: 8px; }
+  body.in-room .brand strong { font-size: 18px; }
+  body.in-room .brand-mark { width: 25px; height: 28px; font-size: 23px; }
+  body.in-room .brand-sub, body.in-room .play-money { display: none; }
+  body.in-room .topbar-right { gap: 8px; }
+  body.in-room .sound-controls input { width: 38px; }
+  body.in-room .connection { gap: 5px; font-size: 9px; }
+  body.in-room .table-topline { flex-basis: 36px; height: 36px; padding: 0 10px; }
+  body.in-room .table-ident { gap: 6px; font-size: 10px; }
+  body.in-room .table-ident .icon-button { width: 28px; height: 30px; padding: 6px; }
+  body.in-room .hand-status { font-size: 9px; gap: 6px; }
+  body.in-room .table-stage { width: 100%; max-width: 510px; min-height: 300px; }
+  body.in-room .poker-table { inset: 12% 6% 11%; border-width: 6px; border-radius: 44%; }
+  body.in-room .felt-border { inset: 9px; border-radius: 44%; }
+  body.in-room .card-deck { left: 45%; top: 32%; width: 19px; height: 27px; }
+  body.in-room .deck-card:last-child::after { font-size: 13px; inset: 2px; }
+  body.in-room .table-center { width: 78%; top: 47%; }
+  body.in-room .board { gap: 5px; min-height: 61px; }
+  body.in-room .board .playing-card { width: 43px; height: 61px; border-radius: 4px; }
+  body.in-room .board .card-rank { font-size: 16px; }
+  body.in-room .board .card-suit { font-size: 11px; }
+  body.in-room .board .card-symbol { font-size: 26px; right: 4px; bottom: 4px; }
+  body.in-room .pot-display { min-height: 24px; margin-bottom: 9px; gap: 6px; font-size: 10px; }
+  body.in-room .pot-display strong { font-size: 22px; }
+  body.in-room .pile-pot { --chip-size: 17px; --chip-step: 19px; width: 60px; height: 24px; }
+  body.in-room .center-message { margin-top: 8px; font-size: 10px; }
+  body.in-room .side-pots { font-size: 9px; }
+  body.in-room .seat { width: 94px; height: 50px; }
+  body.in-room .seat-body { height: 50px; padding: 7px 4px 7px 35px; }
+  body.in-room .seat-avatar { width: 38px; height: 38px; left: -4px; }
+  body.in-room .seat.position-0 { top: 89%; width: 222px; }
+  body.in-room .seat.position-1 { left: 15%; top: 70%; }
+  body.in-room .seat.position-2 { left: 15%; top: 28%; }
+  body.in-room .seat.position-3 { left: 50%; top: 16%; }
+  body.in-room .seat.position-4 { left: 85%; top: 28%; }
+  body.in-room .seat.position-5 { left: 85%; top: 70%; }
+  body.in-room .seat.self .seat-body { width: 116px; }
+  body.in-room .seat.self .seat-cards { left: 128px; top: -7px; }
+  body.in-room .seat.self .seat-cards .playing-card { width: 40px; height: 58px; }
+  body.in-room .seat.self .seat-cards .card-rank { font-size: 17px; }
+  body.in-room .seat.self .seat-cards .card-symbol { font-size: 26px; }
+  body.in-room .seat-name { font-size: 10px; line-height: 16px; gap: 2px; }
+  body.in-room .seat-bank .seat-stack { font-size: 12px; line-height: 17px; }
+  body.in-room .seat .seat-cards .playing-card { width: 23px; height: 31px; border-radius: 3px; }
+  body.in-room .seat .seat-cards .card-rank { font-size: 10px; }
+  body.in-room .seat .seat-cards .card-suit { font-size: 8px; }
+  body.in-room .seat .seat-cards .card-symbol { font-size: 12px; }
+  body.in-room .seat .seat-status { font-size: 9px; top: calc(100% + 3px); }
+  body.in-room .seat.self .seat-status { left: 58px; }
+  body.in-room .seat-dealer { width: 17px; height: 17px; right: -5px; top: -6px; font-size: 9px; }
+  body.in-room .seat .seat-bet,
+  body.in-room .seat:has(.seat-cards:not(:empty)) .seat-bet { left: calc(100% + 5px); top: 20px; gap: 2px; }
+  body.in-room .seat.position-4 .seat-bet,
+  body.in-room .seat.position-5 .seat-bet,
+  body.in-room .seat.position-4:has(.seat-cards:not(:empty)) .seat-bet,
+  body.in-room .seat.position-5:has(.seat-cards:not(:empty)) .seat-bet { left: auto; right: calc(100% + 5px); }
+  body.in-room .seat.position-0 .seat-bet,
+  body.in-room .seat.position-0:has(.seat-cards:not(:empty)) .seat-bet { left: 50%; right: auto; top: -27px; }
+  body.in-room .seat.position-3 .seat-bet,
+  body.in-room .seat.position-3:has(.seat-cards:not(:empty)) .seat-bet { left: calc(100% + 4px); right: auto; top: 8px; }
+  body.in-room .pile-bet { --chip-size: 11px; --chip-step: 5px; --chip-rise: 1px; width: 21px; height: 15px; }
+  body.in-room .bet-amount { font-size: 9px; }
+  body.in-room .game-bottom { flex-basis: calc(174px + env(safe-area-inset-bottom,0px)); height: calc(174px + env(safe-area-inset-bottom,0px)); padding: 0 12px env(safe-area-inset-bottom,0px); }
+  body.in-room .hand-strip { height: 44px; }
+  body.in-room .self-hand-panel .hand-description { gap: 7px; flex-wrap: wrap; line-height: 1.2; }
+  body.in-room .self-hand-panel .hand-label { display: none; }
+  body.in-room .self-hand-panel .hand-description > strong { font-size: 14px; }
+  body.in-room .self-hand-panel .hand-detail { font-size: 10px; }
+  body.in-room .action-status { height: 27px; }
+  body.in-room .your-stack > svg, body.in-room .your-stack span { display: none; }
+  body.in-room .your-stack strong { font-size: 13px; }
+  body.in-room .turn-message { font-size: 10px; gap: 4px; }
+  body.in-room .action-buttons { gap: 6px; grid-template-columns: 1fr 1.4fr 1.2fr 1fr; }
+  body.in-room .action-buttons .button { height: 46px; min-height: 46px; font-size: 12px; padding: 5px; gap: 4px; }
+  body.in-room .action-buttons .button svg { width: 13px; height: 13px; }
+  body.in-room .idle-controls { height: 46px; gap: 6px; }
+  body.in-room .idle-controls .button { padding: 7px 12px; min-height: 46px; font-size: 12px; }
+  body.in-room .social-bar { height: 42px; gap: 8px; }
+  body.in-room .social-toolbar { flex: 1; }
+  body.in-room .social-commands { justify-content: space-between; width: 100%; gap: 0; }
+  body.in-room .social-phrase { font-size: 11px; }
+  body.in-room .social-feed { position: fixed; top: 52px; bottom: auto; left: 48px; right: 10px; transform: none; max-width: none; height: 24px; line-height: 24px; white-space: nowrap; color: #e0dbbb; background: #173b30; padding: 0 8px; border-radius: 4px; pointer-events: none; }
+  body.in-room .social-feed:empty { display: none; }
+  body.in-room .raise-control { position: fixed; left: 12px; right: 12px; bottom: max(12px, env(safe-area-inset-bottom, 0px)); max-height: calc(100dvh - 24px); overflow-y: auto; padding: 14px; gap: 10px; grid-template-columns: 1fr; }
+  body.in-room .raise-heading { grid-column: 1; }
+  body.in-room .raise-presets, body.in-room #raise-button { grid-column: 1; }
+  body.in-room .raise-presets button { height: 36px; }
+  body.in-room #raise-button { height: 44px; }
+}
+@media (max-width: 360px) {
+  body.in-room .table-ident { gap: 4px; font-size: 9px; }
+  body.in-room .seat { width: 84px; height: 46px; }
+  body.in-room .seat-body { height: 46px; padding: 6px 3px 6px 31px; }
+  body.in-room .seat-avatar { width: 34px; height: 34px; left: -4px; }
+  body.in-room .seat-name { font-size: 9px; line-height: 15px; }
+  body.in-room .seat-bank .seat-stack { font-size: 11px; }
+  body.in-room .board .playing-card { width: 38px; height: 54px; }
+  body.in-room .board { min-height: 54px; gap: 4px; }
+  body.in-room .seat.self .seat-body { width: 112px; }
+  body.in-room .seat.self .seat-cards { left: 124px; }
+  body.in-room .seat.self .seat-cards .playing-card { width: 38px; height: 54px; }
+  body.in-room .action-buttons .button svg { display: none; }
+  body.in-room .game-bottom { padding-left: 10px; padding-right: 10px; }
+}
+@media (max-height: 650px) and (max-width: 680px) {
+  body.in-room .seat.position-0 { top: 89%; }
+  body.in-room .seat.position-1, body.in-room .seat.position-5 { top: 74%; }
+  body.in-room .seat.position-2, body.in-room .seat.position-4 { top: 27%; }
+  body.in-room .board .playing-card { height: 49px; width: 35px; }
+  body.in-room .board { min-height: 49px; }
+  body.in-room .card-deck { opacity: 0; }
+  body.in-room .seat.position-1 .seat-status { left: 0; transform: none; }
+  body.in-room .seat.position-5 .seat-status { left: auto; right: 0; transform: none; }
+  body.in-room .table-center { top: 47%; }
+  body.in-room .center-message { margin-top: 4px; }
+}

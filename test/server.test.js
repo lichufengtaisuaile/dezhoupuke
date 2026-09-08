@@ -3,6 +3,7 @@ import { once } from 'node:events';
 import test from 'node:test';
 import { io } from 'socket.io-client';
 import { createPokerServer } from '../server.js';
+import { describeHand } from '../hand-description.js';
 
 const WAIT_MS = 5000;
 
@@ -195,9 +196,13 @@ test('each connection sees only its own hole cards and no resume credentials', a
   for (const client of players) {
     await stateWhere(client, (state) => state.phase === 'playing');
     assert.equal(self(client).cards.length, 2);
+    assert.deepEqual(client.state.selfHand, describeHand(self(client).cards));
+    assert.equal(client.state.selfHand.complete, false);
+    assert.equal(client.state.canShowCards, false);
     dealt.push(...self(client).cards.map((card) => `${card.rank}:${card.suit}`));
     for (const player of client.state.players) {
       assert.equal(player.hasCards, true);
+      assert.equal(Object.hasOwn(player, 'hand'), false, 'opponent hand descriptions are never included');
       if (player.id !== client.identity.playerId) assert.equal(player.cards, null);
     }
     const wireStates = JSON.stringify(client.states);
@@ -282,6 +287,8 @@ test('a mid-hand arrival waits until the next deal', async (t) => {
   assert.equal(self(newcomer).inHand, false);
   assert.equal(self(newcomer).hasCards, false);
   assert.equal(self(newcomer).cards, null);
+  assert.equal(newcomer.state.selfHand, null);
+  assert.equal(newcomer.state.canShowCards, false);
   assert.equal(newcomer.state.legal, null);
   await stateWhere(players[0], (state) => state.players.length === 3);
   await passiveHand(players);
@@ -353,6 +360,142 @@ test('a replacement player does not inherit the departed player\'s cards', async
   assert.equal(self(replacement).inHand, false);
   assert.equal(self(replacement).hasCards, false);
   assert.equal(self(replacement).cards, null);
+  assert.equal(replacement.state.selfHand, null);
+  assert.equal(replacement.state.canShowCards, false);
+});
+
+test('showdown results expose each winner hole cards, best five and Chinese hand description', async (t) => {
+  const context = await fixture(t);
+  const players = await context.room(3);
+  await success(players[0], 'room:auto-next', { enabled: false });
+  await success(players[0], 'room:start');
+  const folding = await nextTurn(players);
+  await success(folding, 'game:action', movePayload(folding.state, 'fold'));
+  await stateWhere(players[0], state => state.players.some(player => player.id === folding.identity.playerId && player.folded));
+  const { state } = await passiveHand(players);
+  for (const client of players) {
+    await stateWhere(client, next => next.phase === 'finished');
+    assert.equal(client.state.canShowCards, false);
+    assert.deepEqual(client.state.result, state.result);
+    assert.deepEqual(client.state.selfHand, describeHand(self(client).cards, state.board));
+    for (const winner of client.state.result) {
+      assert.equal(winner.reason, 'showdown');
+      assert.equal(winner.revealed, true);
+      assert.equal(winner.cards.length, 2);
+      assert.equal(winner.hand.complete, true);
+      assert.equal(winner.hand.cards.length, 5);
+      assert.deepEqual(winner.hand, describeHand(winner.cards, state.board));
+      assert.equal(winner.hand.name, winner.handName);
+    }
+    if (client !== folding) assert.equal(client.state.players.find(player => player.id === folding.identity.playerId).cards, null);
+    await rejected(client, 'game:show-cards', { handNumber: state.handNumber });
+  }
+});
+
+test('an all-in folds winner can voluntarily reveal without changing chips or the result', async (t) => {
+  const context = await fixture(t);
+  const players = await context.room(2);
+  const [host] = players;
+  const outsider = await context.connect();
+  await rejected(outsider, 'game:show-cards', { handNumber: 1 });
+  await rejected(host, 'game:show-cards', { handNumber: 0 });
+  await success(host, 'room:auto-next', { enabled: false });
+  await success(host, 'room:start');
+  const winner = await nextTurn(players);
+  const turnId = winner.state.turnId;
+  await rejected(winner, 'game:show-cards', { handNumber: winner.state.handNumber });
+  await success(winner, 'game:action', movePayload(winner.state, 'all-in'));
+  await stateWhere(host, state => state.turnId !== turnId);
+  const loser = await nextTurn(players);
+  await success(loser, 'game:action', movePayload(loser.state, 'fold'));
+  await stateWhere(winner, state => state.phase === 'finished');
+  await stateWhere(loser, state => state.phase === 'finished');
+  const handNumber = winner.state.handNumber;
+  const holeCards = structuredClone(self(winner).cards);
+  const moneyBefore = winner.state.players.map(({ id, stack, bet }) => ({ id, stack, bet }));
+  const potBefore = winner.state.pot;
+  const awardBefore = winner.state.result[0].amount;
+  assert.equal(winner.state.canShowCards, true);
+  assert.equal(loser.state.canShowCards, false);
+  assert.equal(loser.state.players.find(player => player.id === winner.identity.playerId).cards, null);
+  assert.equal(loser.state.result[0].cards, null);
+  assert.equal(loser.state.result[0].hand, null);
+  assert.equal(loser.state.result[0].reason, 'folds');
+  assert.equal(loser.state.result[0].handName, '其余玩家弃牌');
+  assert.equal(loser.state.result[0].revealed, false);
+  assert.deepEqual(winner.state.result[0].cards, holeCards);
+  await rejected(loser, 'game:show-cards', { handNumber, playerId: winner.identity.playerId });
+  await rejected(winner, 'game:show-cards', { handNumber: handNumber - 1 });
+  await rejected(winner, 'game:show-cards', { handNumber: String(handNumber) });
+  await success(winner, 'game:show-cards', { handNumber });
+  await stateWhere(loser, state => state.result[0]?.revealed);
+  for (const client of players) {
+    assert.equal(client.state.canShowCards, false);
+    assert.deepEqual(client.state.players.find(player => player.id === winner.identity.playerId).cards, holeCards);
+    assert.deepEqual(client.state.result[0].cards, holeCards);
+    assert.deepEqual(client.state.result[0].hand, describeHand(holeCards));
+    assert.equal(client.state.result[0].reason, 'folds');
+    assert.equal(client.state.result[0].amount, awardBefore);
+    assert.equal(client.state.pot, potBefore);
+    assert.deepEqual(client.state.players.map(({ id, stack, bet }) => ({ id, stack, bet })), moneyBefore);
+    assert.equal(client.state.nextHandAt, null, 'revealing respects paused auto-dealing');
+  }
+  const revealedState = structuredClone(winner.state);
+  await success(winner, 'game:show-cards', { handNumber });
+  assert.deepEqual(winner.state, revealedState, 'a repeated show is harmless');
+  const resumed = await context.connect();
+  resumed.identity = await success(resumed, 'room:resume', loser.identity);
+  assert.deepEqual(resumed.state.result[0].cards, holeCards);
+  assert.equal(resumed.state.result[0].revealed, true);
+  const activeHost = host === loser ? resumed : host;
+  await success(activeHost, 'room:start');
+  await stateWhere(winner, state => state.handNumber === handNumber + 1);
+  assert.equal(winner.state.canShowCards, false);
+  assert.deepEqual(winner.state.result, []);
+  assert.equal(winner.state.players.find(player => player.id === loser.identity.playerId).cards, null);
+  await rejected(winner, 'game:show-cards', { handNumber });
+});
+
+test('showing an ordinary folds win restarts the next-hand countdown only once', async (t) => {
+  const context = await fixture(t, { nextHandDelayMs: 250 });
+  const players = await context.room(2);
+  await success(players[0], 'room:start');
+  const finished = await foldHeadsUp(players);
+  const winner = players.find(client => client.identity.playerId === finished.result[0].id);
+  await stateWhere(winner, state => state.phase === 'finished');
+  await new Promise(resolve => setTimeout(resolve, 40));
+  await success(winner, 'game:show-cards', { handNumber: 1 });
+  const deadline = winner.state.nextHandAt;
+  assert.ok(deadline > finished.nextHandAt);
+  await success(winner, 'game:show-cards', { handNumber: 1 });
+  assert.equal(winner.state.nextHandAt, deadline);
+  const next = await stateWhere(winner, state => state.handNumber === 2);
+  assert.equal(next.canShowCards, false);
+  assert.deepEqual(next.result, []);
+  assert.equal(next.players.find(player => player.id !== winner.identity.playerId).cards, null);
+});
+
+test('a replacement at a revealed winner seat never inherits its cards or private hand', async (t) => {
+  const context = await fixture(t);
+  const players = await context.room(2);
+  await success(players[0], 'room:auto-next', { enabled: false });
+  await success(players[0], 'room:start');
+  const state = await foldHeadsUp(players);
+  const winner = players.find(client => client.identity.playerId === state.result[0].id);
+  const remaining = players.find(client => client !== winner);
+  await stateWhere(winner, next => next.phase === 'finished');
+  const seat = self(winner).seat;
+  await success(winner, 'game:show-cards', { handNumber: 1 });
+  await success(winner, 'room:leave');
+  const replacement = await context.connect();
+  replacement.identity = await success(replacement, 'room:join', { code: remaining.identity.code, name: 'New seat' });
+  assert.equal(self(replacement).seat, seat);
+  assert.equal(self(replacement).cards, null);
+  assert.equal(self(replacement).hasCards, false);
+  assert.equal(replacement.state.selfHand, null);
+  assert.equal(replacement.state.canShowCards, false);
+  assert.equal(replacement.state.result[0].id, winner.identity.playerId);
+  await rejected(replacement, 'game:show-cards', { handNumber: 1 });
 });
 
 test('an unattended turn expires without blocking the table or losing chips', async (t) => {

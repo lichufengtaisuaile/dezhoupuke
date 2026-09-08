@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { Server } from 'socket.io';
 import { createTable } from './engine.js';
+import { describeHand } from './hand-description.js';
 import './public/social-catalog.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -110,6 +111,7 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
   function snapshot(room, viewer) {
     const acting = isPlaying(room) && room.table.isBettingRoundInProgress();
     const turnSeat = acting ? room.table.playerToAct() : null;
+    const showableWinner = foldWinner(room, viewer);
     return {
       code: room.code, phase: room.phase, handNumber: room.handNumber,
       autoNext: room.autoNext, nextHandAt: room.nextHandAt,
@@ -126,8 +128,19 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       pots: room.pots.map(p => ({ size: p.size })),
       dealerSeat: room.dealerSeat, turnSeat, turnDeadline: room.turnDeadline,
       turnId: room.turnId, legal: viewer.seat === turnSeat ? getLegal(room) : null,
-      result: room.result, log: room.log,
+      selfHand: viewer.inHand ? describeHand(room.holeCards[viewer.seat], room.board) : null,
+      canShowCards: Boolean(showableWinner && !showableWinner.revealed),
+      result: room.result.map(winner => {
+        const visible = winner.id === viewer.id || winner.revealed;
+        return { ...winner, cards: visible ? winner.cards : null, hand: visible ? winner.hand : null };
+      }),
+      log: room.log,
     };
+  }
+  function foldWinner(room, player) {
+    if (room.phase !== 'finished' || !player.inHand || player.folded || room.result.length !== 1) return null;
+    const winner = room.result[0];
+    return winner.id === player.id && winner.reason === 'folds' ? winner : null;
   }
   function lobbyRooms() {
     return [...rooms.values()]
@@ -206,7 +219,13 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       const amount = player.stack - p.stack;
       if (amount <= 0) return [];
       const winningHand = winnings.find(winner => winner[0] === p.seat);
-      return [{ id: p.id, name: p.name, amount, handName: eligible.size === 1 ? '其余玩家弃牌' : HAND_NAMES[winningHand?.[1]?.ranking] ?? '赢得底池' }];
+      return [{
+        id: p.id, name: p.name, amount,
+        handName: eligible.size === 1 ? '其余玩家弃牌' : HAND_NAMES[winningHand?.[1]?.ranking] ?? '赢得底池',
+        reason: eligible.size === 1 ? 'folds' : 'showdown',
+        cards: room.holeCards[p.seat], hand: describeHand(room.holeCards[p.seat], room.board),
+        revealed: eligible.size > 1,
+      }];
     });
     room.phase = 'finished';
     clearTurn(room);
@@ -484,6 +503,18 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       broadcast(room);
     });
     on('game:action', input => { const { room, player } = member(socket); takeAction(room, player, input); });
+    on('game:show-cards', input => {
+      const { room, player } = member(socket);
+      requireThat(input.handNumber === room.handNumber, '牌局已更新，不能展示上一手的牌');
+      const winner = foldWinner(room, player);
+      requireThat(winner, '本手结束后，未摊牌的赢家可以展示自己的手牌');
+      if (winner.revealed) return;
+      winner.revealed = true;
+      room.revealed.add(player.seat);
+      log(room, `${player.name} 展示手牌 · ${winner.hand.detail}`);
+      clearNextHand(room);
+      broadcast(room);
+    });
     on('room:rebuy', () => {
       const { room, player } = member(socket);
       requireThat(!isPlaying(room), '本手结束后可以补充筹码');

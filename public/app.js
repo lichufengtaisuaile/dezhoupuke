@@ -27,8 +27,14 @@
   let previousTurn = "";
   let networkUrls = [];
   let skipNextDeal = true;
+  let settlementTimer;
+  let settlementReady = false;
   const dealing = window.createDealingEffects($("table-stage"), $("card-deck"));
   const chips = window.createChipEffects($("table-stage"));
+  const audio = window.createTableAudio({
+    button: $("sound-button"), volumeInput: $("sound-volume"), notify: toast,
+  });
+  const tableLayout = window.createTableLayout({ root: $("game-view") });
   try {
     session = JSON.parse(sessionStorage.getItem(storageKey) || "null");
   } catch {
@@ -44,6 +50,7 @@
   const social = window.createSocial({
     root: $("social-bar"), stage: $("table-stage"),
     send: payload => request("room:react", payload), notify: toast,
+    onReaction: (_item, event) => audio.reaction(event),
   });
 
   async function enterRoom(event, payload) {
@@ -99,7 +106,11 @@
   function clearSession() {
     dealing.cancel();
     chips.cancel();
+    audio.cancel();
     social.cancel();
+    tableLayout.reset();
+    clearTimeout(settlementTimer);
+    settlementReady = false;
     state = null;
     session = null;
     previousTurn = "";
@@ -205,8 +216,8 @@
           : "";
       return `<div class="seat position-${position} ${own ? "self" : ""} ${active ? "active" : ""} ${player.folded ? "folded" : ""} ${player.winner ? "winner" : ""}" data-player-id="${esc(player.id)}" aria-label="${esc(player.name)}，筹码 ${money(player.stack)}，${esc(actionText(player))}">
         <span class="seat-bet" data-chip-anchor="bet:${esc(player.id)}" style="visibility:${player.bet > 0 ? "visible" : "hidden"}">${window.chipPileMarkup(player.bet, "bet")}<span class="bet-amount chip-money" data-money-key="bet:${esc(player.id)}">${money(player.bet)}</span></span>
-        <div class="seat-cards">${cards}</div><div class="seat-body">${state.dealerSeat === seat ? '<span class="seat-dealer" title="庄家">D</span>' : ""}<div class="seat-name">${player.isBot ? '<i data-lucide="bot"></i>' : ""}<button class="seat-interact" data-interact-player="${esc(player.id)}" title="与 ${esc(player.name)} 互动">${esc(player.name)}</button>${own ? '<b class="self-tag">你</b>' : ""}</div>
-        <div class="seat-bank" data-chip-anchor="bank:${esc(player.id)}">${window.chipPileMarkup(player.stack, "bank")}<div class="seat-stack chip-money" data-money-key="stack:${esc(player.id)}">${money(player.stack)}</div></div>
+        <div class="seat-cards">${cards}</div><div class="seat-body">${state.dealerSeat === seat ? '<span class="seat-dealer" title="庄家">D</span>' : ""}${window.playerAvatarMarkup(player, own)}<div class="seat-details"><div class="seat-name">${player.isBot ? '<i data-lucide="bot"></i>' : ""}<span title="${esc(player.name)}">${esc(player.name)}</span>${own ? '<b class="self-tag">你</b>' : ""}</div>
+        <div class="seat-bank" data-chip-anchor="bank:${esc(player.id)}">${window.chipPileMarkup(player.stack, "bank")}<div class="seat-stack chip-money" data-money-key="stack:${esc(player.id)}">${money(player.stack)}</div></div></div>
         ${active ? '<div class="seat-timer"><span id="seat-timer-bar"></span></div>' : ""}${removeButton}</div><span class="seat-status">${esc(actionText(player))}</span></div>`;
     }).join("");
   }
@@ -223,6 +234,8 @@
     social.update(state, socket.connected);
     if (!state) return;
     $("room-code").textContent = state.code;
+    $("table-room-code").textContent = state.code;
+    $("table-blinds").textContent = `${money(state.smallBlind)} / ${money(state.bigBlind)}`;
     $("room-blinds").textContent =
       `盲注 ${money(state.smallBlind)} / ${money(state.bigBlind)}`;
     $("player-count").textContent =
@@ -231,7 +244,7 @@
     $("roster").innerHTML = state.players
       .map(
         (p) =>
-          `<div class="roster-player"><span class="roster-avatar">${p.isBot ? '<i data-lucide="bot"></i>' : esc(p.name.slice(0, 1))}</span><span class="roster-name">${esc(p.name)}${p.id === state.selfId ? " · 你" : ""}<span class="roster-tag">${p.isBot ? "电脑玩家" : !p.connected ? "已断线" : p.id === state.hostId ? "房主" : "在线"}</span></span><span class="roster-stack">${money(p.stack)}</span>${p.isBot && isHost() && state.phase !== "playing" ? `<button class="icon-button roster-remove" data-remove-bot="${esc(p.id)}" title="移除 ${esc(p.name)}" aria-label="移除 ${esc(p.name)}"><i data-lucide="x"></i></button>` : ""}</div>`,
+          `<div class="roster-player">${window.playerAvatarMarkup(p, p.id === state.selfId)}<span class="roster-name">${esc(p.name)}${p.id === state.selfId ? " · 你" : ""}<span class="roster-tag">${p.isBot ? "电脑玩家" : !p.connected ? "已断线" : p.id === state.hostId ? "房主" : "在线"}</span></span><span class="roster-stack">${money(p.stack)}</span>${p.isBot && isHost() && state.phase !== "playing" ? `<button class="icon-button roster-remove" data-remove-bot="${esc(p.id)}" title="移除 ${esc(p.name)}" aria-label="移除 ${esc(p.name)}"><i data-lucide="x"></i></button>` : ""}</div>`,
       )
       .join("");
     const host = isHost();
@@ -252,6 +265,12 @@
     $("rebuy-button").hidden =
       playing || !playerSelf() || playerSelf().stack > 0;
     $("rebuy-button").disabled = pending || !socket.connected;
+    $("quick-start").hidden = playing || !host;
+    $("quick-start").disabled = $("start-button").disabled;
+    $("quick-start").querySelector("span").textContent = $("start-label").textContent;
+    $("quick-rebuy").hidden = $("rebuy-button").hidden;
+    $("quick-rebuy").disabled = $("rebuy-button").disabled;
+    $("quick-invite").hidden = state.phase !== "lobby";
     $("room-wait").textContent = playing
       ? ""
       : funded < 2
@@ -262,6 +281,24 @@
           ? `${funded} 位玩家已就绪`
           : "等待房主开始牌局";
     $("room-wait").hidden = !$("room-wait").textContent;
+  }
+  function miniCards(cards) {
+    return `<span class="hand-mini-cards">${cards.map(card => cardMarkup(card)).join("")}</span>`;
+  }
+  function renderHandInfo() {
+    const self = playerSelf();
+    const hand = state?.selfHand;
+    const panel = $("self-hand-panel");
+    panel.hidden = !hand || !self?.cards?.length || state?.phase === "finished";
+    panel.innerHTML = panel.hidden ? "" : `<div class="hand-description"><span class="hand-label">${self.folded ? "已弃牌" : hand.complete ? "当前牌型" : "起手牌"}</span><strong>${esc(hand.name)}</strong><span class="hand-detail">${esc(hand.detail)}</span></div>`;
+    $("table-ready").hidden = !panel.hidden || state?.phase === "finished";
+    $("table-ready").textContent = state?.phase === "playing" ? "下一手入局" : "牌桌已就绪";
+  }
+  function winnerMarkup(winner) {
+    const hand = winner.hand;
+    const visibility = !winner.cards ? "未亮牌" : !winner.revealed ? "仅自己可见" : "底牌";
+    const reason = winner.reason === "folds" ? `其余玩家弃牌${winner.revealed ? " · 已亮牌" : ""}` : "摊牌获胜";
+    return `<article class="winner-result" aria-label="${esc(winner.name)} 获胜"><div class="winner-summary"><i data-lucide="trophy"></i><strong class="winner-name">${esc(winner.name)}</strong><strong class="winner-amount">+${money(winner.amount)}</strong><span class="winner-reason">${reason}</span></div><div class="winner-hand"><div class="winner-hole"><span class="hand-label">${visibility}</span>${miniCards(winner.cards || ["back", "back"])}</div>${hand ? `<div class="hand-description"><strong>${esc(hand.name)}</strong><span class="hand-detail">${esc(hand.detail)}</span></div>${hand.complete ? `<div class="winner-best"><span class="hand-label">最佳五张</span>${miniCards(hand.cards)}</div>` : ""}` : '<span class="hand-detail">底牌未公开</span>'}</div></article>`;
   }
   function renderTable() {
     $("hand-number").textContent = state?.handNumber
@@ -299,11 +336,12 @@
             .join(" · ")
         : "";
     renderSeats();
+    renderHandInfo();
     const results = state?.result || [];
     $("result-panel").hidden = state?.phase !== "finished" || !results.length;
-    $("result-panel").innerHTML = results.length
-      ? `<i data-lucide="trophy"></i><div class="result-items">${results.map((r) => `<div class="result-item">${esc(r.name)}<strong>+${money(r.amount)}</strong>${r.handName ? `<small>${esc(r.handName)}</small>` : ""}</div>`).join("")}</div>`
-      : "";
+    $("result-panel").innerHTML = results.map(winnerMarkup).join("");
+    $("settlement-strip").hidden = state?.phase !== "finished" || !results.length || !settlementReady;
+    $("settlement-summary").innerHTML = results.length ? `${miniCards(results[0].cards || ["back", "back"])}<span class="settlement-text"><strong>${results.map(winner => `${esc(winner.name)} +${money(winner.amount)}`).join(" · ")}</strong><span>${results.map(winner => `${winner.reason === "folds" ? "其余玩家弃牌 · " : ""}${esc(winner.hand?.name || "未亮牌")}`).join(" · ")}</span></span>` : "";
     const log = state?.log || [];
     $("history-list").innerHTML = log.length
       ? log
@@ -319,6 +357,8 @@
   function renderActions() {
     const self = playerSelf();
     $("your-stack").textContent = self ? money(self.stack) : "—";
+    $("show-cards-row").hidden = !state?.canShowCards;
+    $("show-cards-button").disabled = pending || !socket.connected;
     const myTurn = Boolean(
       state?.phase === "playing" &&
       state.legal &&
@@ -326,6 +366,9 @@
     );
     const legal = state?.legal;
     $("betting-controls").hidden = !myTurn;
+    $("idle-controls").hidden = myTurn;
+    $("idle-message").textContent = state?.phase === "playing" ? "牌局进行中" : "";
+    tableLayout.update(state);
     let message = "等待入座";
     if (state)
       message =
@@ -356,12 +399,14 @@
       ? "过牌"
       : `跟注 ${money(legal.callAmount)}`;
     const canRaise = actions.includes("raise") || actions.includes("bet");
+    $("raise-toggle").disabled = locked || !canRaise;
+    $("raise-toggle").querySelector("span").textContent = actions.includes("bet") ? "下注" : "加注";
     $("raise-button").disabled = locked || !canRaise;
     $("raise-button").querySelector("span").textContent = actions.includes(
       "bet",
     )
-      ? "下注"
-      : "加注";
+      ? "确认下注"
+      : "确认加注";
     $("all-in-button").disabled = locked || !legal.canAllIn;
     $("raise-amount").disabled = locked || !canRaise;
     $("raise-slider").disabled = locked || !canRaise;
@@ -407,6 +452,7 @@
     return "本手结束，等待下一手";
   }
   function updateCountdown() {
+    audio.tick(state);
     if (state?.phase === "finished") {
       $("turn-message").textContent = nextHandText();
       if (state.nextHandAt) $("room-wait").textContent = nextHandText();
@@ -480,18 +526,24 @@
     icons();
   });
   $("start-button").addEventListener("click", async () => {
-    await exclusive("room:start", {});
+    if (await exclusive("room:start", {})) tableLayout.close();
     renderRoom();
     icons();
   });
   $("auto-next").addEventListener("change", async (event) => {
     await exclusive("room:auto-next", { enabled: event.target.checked });
   });
+  $("show-cards-button").addEventListener("click", async () => {
+    if (state?.canShowCards) await exclusive("game:show-cards", { handNumber: state.handNumber });
+  });
   $("rebuy-button").addEventListener("click", async () => {
     await exclusive("room:rebuy", {});
     renderRoom();
     icons();
   });
+  $("quick-start").addEventListener("click", () => $("start-button").click());
+  $("quick-rebuy").addEventListener("click", () => $("rebuy-button").click());
+  $("quick-invite").addEventListener("click", copyInvite);
   async function leaveRoom() {
     if (await exclusive("room:leave", {})) {
       clearSession();
@@ -504,6 +556,11 @@
     else { lobby.reset(); refreshLobby(); }
   });
   $("roster").addEventListener("click", async (event) => {
+    const target = event.target.closest("[data-interact-player]");
+    if (target) {
+      $("close-room").click();
+      social.openTarget(target.dataset.interactPlayer);
+    }
     const button = event.target.closest("[data-remove-bot]");
     if (button) {
       await exclusive("room:remove-bot", { id: button.dataset.removeBot });
@@ -606,6 +663,8 @@
     skipNextDeal = true;
     dealing.cancel();
     chips.cancel();
+    audio.cancel();
+    tableLayout.reset();
     social.cancel();
     $("connection").classList.remove("connected");
     $("connection-label").textContent = "重连中";
@@ -621,11 +680,24 @@
   });
   socket.on("room:state", (next) => {
     const previous = state;
+    const newSettlement = next.phase === "finished" && (previous?.phase !== "finished" || previous?.handNumber !== next.handNumber || previous?.code !== next.code);
+    if (newSettlement || next.phase !== "finished") {
+      clearTimeout(settlementTimer);
+      settlementReady = false;
+    }
     const chipPositions = chips.capture();
     state = next;
     render();
     dealing.update(previous, next, !skipNextDeal);
     chips.update(previous, next, chipPositions, !skipNextDeal, dealing.remaining());
+    audio.update(previous, next, !skipNextDeal, dealing.remaining());
+    if (newSettlement) {
+      const delay = dealing.remaining();
+      settlementTimer = setTimeout(() => {
+        settlementReady = true;
+        $("settlement-strip").hidden = state?.phase !== "finished";
+      }, delay);
+    }
     social.update(next, socket.connected);
     skipNextDeal = false;
   });

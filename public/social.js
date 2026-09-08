@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  window.createSocial = function ({ root, stage, send, notify }) {
+  window.createSocial = function ({ root, stage, send, notify, onReaction }) {
     const catalog = window.HOLDEM_REACTIONS;
     const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
     const icon = name => `<i data-lucide="${name}"></i>`;
@@ -8,7 +8,6 @@
       <span class="social-heading">桌边互动</span>
       <div class="social-commands">
         <button class="social-tool" data-open-social="emoji" title="表情" aria-label="表情" aria-expanded="false">${icon("smile")}</button>
-        <button class="social-tool gift-tool" data-open-social="gift" title="送花" aria-label="送花" aria-expanded="false">${icon("flower-2")}</button>
         <span class="social-divider"></span>
         <button class="social-phrase" data-send-reaction="luck">${icon("clover")}<span>祝你好运</span></button>
         <button class="social-phrase" data-send-reaction="inspect">${icon("scan-eye")}<span>我要验牌</span></button>
@@ -17,12 +16,10 @@
     </div>
     <div class="social-picker" hidden role="dialog" aria-label="桌边互动选项">
       <div class="social-picker-heading"><strong>桌边互动</strong><button class="icon-button" data-close-social title="关闭互动" aria-label="关闭互动">${icon("x")}</button></div>
-      <label class="social-target-row"><span>发送给</span><select aria-label="互动对象"><option value="">全桌</option></select></label>
       <div class="social-options"></div>
     </div>
     <div class="social-feed" role="status" aria-live="polite"></div>`;
     const picker = root.querySelector(".social-picker");
-    const targetSelect = root.querySelector("select");
     const options = root.querySelector(".social-options");
     const feed = root.querySelector(".social-feed");
     const layer = document.createElement("div");
@@ -35,84 +32,127 @@
     const seen = new Set();
     let state = null;
     let connected = false;
-    let rosterKey = "";
     let mode = "all";
     let sending = false;
     let cooldownUntil = 0;
     let cooldownTimer;
     let lastTrigger = null;
+    let avatarTrigger = null;
+    let session = 0;
 
     function later(callback, delay) {
       const timer = setTimeout(() => { timers.delete(timer); callback(); }, delay);
       timers.add(timer);
     }
     function refreshIcons() { window.lucide?.createIcons(); }
-    function closePicker() {
+    function findAvatar(id, roster = false) {
+      const container = roster ? document.getElementById("roster") : stage;
+      return [...(container?.querySelectorAll(".seat-avatar[data-interact-player]") || [])].find(node => node.dataset.interactPlayer === id);
+    }
+    function triggerAvatar() {
+      return avatarTrigger && (findAvatar(avatarTrigger.id, avatarTrigger.roster) || findAvatar(avatarTrigger.id));
+    }
+    function positionPicker() {
+      if (picker.hidden || !avatarTrigger) return;
+      const anchor = triggerAvatar();
+      if (!anchor) { closePicker(); return; }
+      anchor.setAttribute("aria-expanded", "true");
+      const box = anchor.getBoundingClientRect();
+      const width = picker.offsetWidth;
+      const height = picker.offsetHeight;
+      const margin = 8;
+      const below = box.bottom + margin;
+      const above = box.top - height - margin;
+      const top = below + height <= innerHeight - margin ? below : above >= margin ? above : margin;
+      picker.style.left = `${Math.max(margin, Math.min(innerWidth - width - margin, box.left + box.width / 2 - width / 2))}px`;
+      picker.style.top = `${Math.max(margin, Math.min(innerHeight - height - margin, top))}px`;
+    }
+    function closePicker(restoreFocus = false) {
+      const anchor = triggerAvatar();
       picker.hidden = true;
+      picker.classList.remove("avatar-picker");
+      picker.style.removeProperty("left");
+      picker.style.removeProperty("top");
+      anchor?.setAttribute("aria-expanded", "false");
       root.querySelectorAll("[data-open-social]").forEach(button => button.setAttribute("aria-expanded", "false"));
+      const focusTarget = anchor || (lastTrigger?.isConnected ? lastTrigger : null);
+      if (restoreFocus) focusTarget?.focus({ preventScroll: true });
+      avatarTrigger = null;
     }
     function controls() {
       const locked = !state || !connected || sending || Date.now() < cooldownUntil;
       root.querySelectorAll("[data-send-reaction],[data-open-social]").forEach(button => { button.disabled = locked; });
-      targetSelect.disabled = locked;
       const rose = options.querySelector('[data-send-reaction="rose"]');
-      if (rose) rose.disabled ||= !targetSelect.value;
+      if (rose) rose.disabled ||= !giftRecipient();
+    }
+    function giftRecipient() {
+      return state?.players.find(player => player.id === avatarTrigger?.id && player.id !== state.selfId && player.connected);
     }
     function renderOptions() {
       const choices = mode === "gift" ? catalog.filter(item => item.kind === "gift")
-        : mode === "emoji" ? catalog.filter(item => item.kind === "emoji") : catalog;
-      options.className = `social-options ${mode === "emoji" ? "emoji-options" : ""}`;
+        : mode === "emoji" ? catalog.filter(item => item.kind === "emoji") : catalog.filter(item => item.kind !== "gift");
+      options.className = `social-options ${mode === "emoji" ? "emoji-options" : mode === "gift" ? "gift-options" : ""}`;
       options.innerHTML = choices.map(item => `<button class="social-option ${item.kind === "emoji" ? "emoji-option" : ""}" data-send-reaction="${esc(item.id)}" title="${esc(item.label)}" aria-label="${esc(item.label)}">${item.symbol ? `<span class="reaction-symbol" aria-hidden="true">${esc(item.symbol)}</span>` : icon(item.icon || "message-circle")}${item.kind !== "emoji" ? `<span>${esc(item.label)}</span>` : ""}</button>`).join("");
-      picker.querySelector("strong").textContent = mode === "gift" ? "送一朵花" : mode === "emoji" ? "表情" : "桌边互动";
+      picker.querySelector("strong").textContent = mode === "gift" ? `送花给 ${giftRecipient()?.name || "玩家"}` : mode === "emoji" ? "表情" : "更多互动";
+      picker.setAttribute("aria-label", mode === "gift" ? "送花" : mode === "emoji" ? "表情" : "更多互动");
       refreshIcons();
       controls();
     }
-    function openPicker(nextMode, targetId = "") {
+    function openPicker(nextMode) {
       mode = nextMode;
-      targetSelect.value = targetId;
-      if (mode === "gift" && !targetSelect.value) {
-        const recipient = state?.players.find(player => player.id !== state.selfId && player.connected);
-        targetSelect.value = recipient?.id || "";
-      }
       picker.hidden = false;
+      picker.classList.toggle("avatar-picker", Boolean(avatarTrigger));
       root.querySelectorAll("[data-open-social]").forEach(button => button.setAttribute("aria-expanded", String(button.dataset.openSocial === mode)));
       renderOptions();
-      targetSelect.focus();
+      positionPicker();
+      options.querySelector("button:not(:disabled)")?.focus({ preventScroll: true });
     }
     root.addEventListener("click", async event => {
       const opener = event.target.closest("[data-open-social]");
       if (opener) {
         lastTrigger = opener;
-        if (!picker.hidden && mode === opener.dataset.openSocial) closePicker();
-        else openPicker(opener.dataset.openSocial);
+        const closing = !picker.hidden && !avatarTrigger && mode === opener.dataset.openSocial;
+        closePicker();
+        if (!closing) openPicker(opener.dataset.openSocial);
         return;
       }
-      if (event.target.closest("[data-close-social]")) { closePicker(); lastTrigger?.focus(); return; }
+      if (event.target.closest("[data-close-social]")) { closePicker(true); return; }
       const button = event.target.closest("[data-send-reaction]");
-      if (!button || !state || sending || Date.now() < cooldownUntil) return;
+      if (!button || !state || !connected || sending || Date.now() < cooldownUntil) return;
       const reactionId = button.dataset.sendReaction;
-      const targetId = picker.contains(button) ? targetSelect.value || null : null;
-      if (reactionId === "rose" && !targetId) { notify("请选择一位玩家", true); return; }
+      const item = catalog.find(item => item.id === reactionId);
+      if (!item) return;
+      const targetId = item.kind === "gift" && mode === "gift" && picker.contains(button) ? giftRecipient()?.id || null : null;
+      if (item.kind === "gift" && !targetId) return;
       sending = true;
       controls();
-      const result = await send({ reactionId, targetId });
-      sending = false;
-      if (result) { cooldownUntil = Date.now() + 1250; closePicker(); }
-      controls();
-      clearTimeout(cooldownTimer);
-      cooldownTimer = setTimeout(controls, 1260);
+      const sendingSession = session;
+      try {
+        const result = await send({ reactionId, targetId });
+        if (sendingSession !== session) return;
+        if (result) { cooldownUntil = Date.now() + 1250; closePicker(true); }
+      } catch {
+        if (sendingSession === session) notify("互动发送失败，请稍后重试", true);
+      } finally {
+        if (sendingSession === session) {
+          sending = false;
+          controls();
+          clearTimeout(cooldownTimer);
+          cooldownTimer = setTimeout(controls, Math.max(0, cooldownUntil - Date.now()) + 10);
+        }
+      }
     });
-    targetSelect.addEventListener("change", controls);
     document.addEventListener("pointerdown", event => {
       if (!root.contains(event.target) && !event.target.closest("[data-interact-player]")) closePicker();
     });
     document.addEventListener("keydown", event => {
-      if (event.key === "Escape" && !picker.hidden) { closePicker(); lastTrigger?.focus(); }
+      if (event.key === "Escape" && !picker.hidden) closePicker(true);
     });
 
     function findSeat(id) { return [...stage.querySelectorAll("[data-player-id]")].find(node => node.dataset.playerId === id); }
-    function point(id) {
-      const node = findSeat(id)?.querySelector(".seat-body");
+    function point(id, avatar = false) {
+      const seat = findSeat(id);
+      const node = (avatar && seat?.querySelector(".seat-avatar")) || seat?.querySelector(".seat-body");
       if (!node) return null;
       const table = stage.getBoundingClientRect();
       const box = node.getBoundingClientRect();
@@ -144,8 +184,8 @@
       later(() => { node.remove(); if (bubbles.get(id) === node) bubbles.delete(id); }, 3400);
     }
     function flowers(fromId, targetId, symbol) {
-      const source = point(fromId);
-      const target = point(targetId);
+      const source = point(fromId, true);
+      const target = point(targetId, true);
       if (!source || !target) return;
       if (reduced.matches) { bubble(targetId, symbol, true); return; }
       const node = document.createElement("div");
@@ -169,33 +209,39 @@
       feed.textContent = "";
       controls();
     }
-    function cancel() { cancelEffects(); closePicker(); seen.clear(); }
+    function cancel() {
+      session += 1;
+      sending = false;
+      cooldownUntil = 0;
+      clearTimeout(cooldownTimer);
+      state = null;
+      connected = false;
+      cancelEffects();
+      closePicker();
+      lastTrigger = null;
+      seen.clear();
+    }
     function update(next, online) {
-      if (state?.code !== next?.code) { cancel(); rosterKey = ""; }
+      if (state?.code !== next?.code) cancel();
       state = next;
       connected = online;
-      const players = state?.players.filter(player => player.connected && player.id !== state.selfId) || [];
-      const key = JSON.stringify(players.map(player => [player.id, player.name]));
-      if (key !== rosterKey) {
-        rosterKey = key;
-        const selected = targetSelect.value;
-        targetSelect.innerHTML = `<option value="">全桌</option>${players.map(player => `<option value="${esc(player.id)}">${esc(player.name)}</option>`).join("")}`;
-        targetSelect.value = players.some(player => player.id === selected) ? selected : "";
-      }
       for (const [id, node] of bubbles) {
         if (!state?.players.some(player => player.id === id)) { node.remove(); bubbles.delete(id); }
         else placeBubble(id, node);
       }
+      if (avatarTrigger && !state?.players.some(player => player.id === avatarTrigger.id && player.connected)) closePicker();
+      positionPicker();
       controls();
     }
     function receive(event) {
-      if (!state || !connected || event.code !== state.code || seen.has(event.id) || document.hidden) return;
+      if (!state || !connected || !event || typeof event.id !== "string" || event.code !== state.code || seen.has(event.id) || document.hidden) return;
       const item = catalog.find(item => item.id === event.reactionId);
       const from = state.players.find(player => player.id === event.fromId);
       const target = state.players.find(player => player.id === event.targetId);
-      if (!item || !from || (event.targetId && !target)) return;
+      if (!item || !from || (event.targetId && !target) || (item.kind === "gift" && !target)) return;
       seen.add(event.id);
       if (seen.size > 100) seen.delete(seen.values().next().value);
+      onReaction?.(item, event);
       const message = item.kind === "gift" ? `${from.name} 送给 ${target.name} 一朵花`
         : `${from.name}${target ? ` 对 ${target.name}` : ""}：${item.symbol || item.label}`;
       feed.textContent = message;
@@ -203,14 +249,18 @@
       if (item.kind === "gift") flowers(from.id, target.id, item.symbol);
       else bubble(from.id, item.symbol || item.label, item.kind === "emoji");
     }
-    window.addEventListener("resize", cancelEffects);
+    window.addEventListener("resize", () => { cancelEffects(); positionPicker(); });
+    window.addEventListener("scroll", positionPicker, true);
     document.addEventListener("visibilitychange", cancelEffects);
     reduced.addEventListener("change", cancelEffects);
     refreshIcons();
     return { update, receive, cancel, openTarget(id) {
-      if (!state || !connected || !state.players.some(player => player.id === id && player.connected)) return;
-      lastTrigger = findSeat(id)?.querySelector(".seat-interact");
-      openPicker("all", id === state.selfId ? "" : id);
+      if (!state || !connected || id === state.selfId || !state.players.some(player => player.id === id && player.connected)) return;
+      const active = document.activeElement?.closest(".seat-avatar[data-interact-player]");
+      closePicker();
+      avatarTrigger = { id, roster: active?.dataset.interactPlayer === id && Boolean(active.closest("#roster")) };
+      lastTrigger = triggerAvatar();
+      openPicker("gift");
     } };
   };
 })();

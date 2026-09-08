@@ -30,7 +30,6 @@
 .social-tool { width: 36px; height: 36px; padding: 8px; flex: 0 0 auto; }
 .social-tool:hover, .social-phrase:hover, .social-option:hover { background: #293630; color: #f1e9d9; }
 .social-tool[aria-expanded="true"] { background: #32433b; color: var(--green); }
-.gift-tool { color: #e6a0b0; }
 .social-divider { width: 1px; height: 17px; background: var(--line); margin: 0 2px; }
 .social-picker {
   position: absolute;
@@ -45,16 +44,15 @@
   border-radius: 8px;
   box-shadow: 0 10px 30px #0007;
 }
-.social-picker-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-.social-picker-heading strong { font-size: 14px; }
+.social-picker-heading { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
+.social-picker-heading strong { font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
 .social-picker-heading .icon-button { height: 28px; width: 28px; }
-.social-target-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; font-size: 12px; color: var(--muted); }
-.social-target-row > span { flex: 0 0 auto; }
-.social-target-row select { flex: 1; min-width: 0; padding: 7px 9px; height: 34px; font-size: 12px; }
 .social-options { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; }
 .social-option { min-width: 0; height: 40px; background: #2b3730; }
 .social-option svg { width: 16px; height: 16px; }
 .social-options.emoji-options { grid-template-columns: repeat(4,minmax(0,1fr)); }
+.social-options.gift-options { grid-template-columns: minmax(0,1fr); }
+.gift-options .social-option { height: 52px; color: #f2b8c5; }
 .reaction-symbol { font-family: "Segoe UI Emoji", "Apple Color Emoji", sans-serif; font-size: 25px; line-height: 30px; }
 .social-feed { min-height: 25px; padding-top: 5px; font-size: 11px; color: #c6b29a; line-height: 18px; overflow-wrap: anywhere; }
 .social-layer { position: absolute; inset: 0; pointer-events: none; z-index: 14; }

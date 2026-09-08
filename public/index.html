@@ -2,7 +2,7 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
     <meta name="theme-color" content="#141b19" />
     <title>同桌 · 德州扑克</title>
     <link
@@ -13,6 +13,10 @@
     <link rel="stylesheet" href="/chips.css" />
     <link rel="stylesheet" href="/lobby.css" />
     <link rel="stylesheet" href="/social.css" />
+    <link rel="stylesheet" href="/avatars.css" />
+    <link rel="stylesheet" href="/hand-info.css" />
+    <link rel="stylesheet" href="/table-layout.css" />
+    <link rel="stylesheet" href="/table-landscape.css" />
     <script src="/socket.io/socket.io.js" defer></script>
     <script src="/vendor/lucide.js" defer></script>
     <script src="/dealing.js" defer></script>
@@ -21,6 +25,9 @@
     <script src="/social-catalog.js" defer></script>
     <script src="/lobby.js" defer></script>
     <script src="/social.js" defer></script>
+    <script src="/avatars.js" defer></script>
+    <script src="/audio.js" defer></script>
+    <script src="/table-layout.js" defer></script>
     <script src="/app.js" defer></script>
   </head>
   <body>
@@ -33,8 +40,12 @@
           ></a
         >
         <div class="topbar-right">
-          <span class="play-money">休闲筹码</span
-          ><span class="connection" id="connection"
+          <span class="play-money">休闲筹码</span>
+          <div class="sound-controls">
+            <button class="icon-button" id="sound-button" aria-label="开启音效" title="开启音效" aria-pressed="false"><i data-lucide="volume-x"></i></button>
+            <input type="range" id="sound-volume" min="0" max="100" step="5" value="40" aria-label="音效音量" title="音效音量" />
+          </div>
+          <span class="connection" id="connection"
             ><span class="status-dot"></span
             ><span id="connection-label">连接中</span></span
           ><button
@@ -49,7 +60,9 @@
       </header>
       <main id="home-view"></main>
       <div class="workspace" id="game-view" hidden>
-        <aside class="sidebar">
+        <div class="table-overlay-backdrop" id="room-backdrop" hidden></div>
+        <aside class="sidebar" id="room-drawer" aria-label="房间设置" hidden>
+          <div class="drawer-heading"><h2>房间设置</h2><button class="icon-button" id="close-room" title="关闭房间设置" aria-label="关闭房间设置"><i data-lucide="x"></i></button></div>
           <section id="room-panel" class="room-panel" hidden>
             <span class="eyebrow">同桌 · 私人牌桌</span>
             <div class="room-title">
@@ -114,7 +127,8 @@
         <main class="game-area">
           <div class="table-topline">
             <div class="table-ident">
-              <span class="tiny-mark">♠</span><span>无限注德州扑克</span>
+              <button class="icon-button" id="room-toggle" title="房间设置" aria-label="房间设置"><i data-lucide="sliders-horizontal"></i></button>
+              <strong id="table-room-code"></strong><span id="table-blinds"></span>
             </div>
             <div class="hand-status">
               <span id="hand-number">尚未开局</span
@@ -144,13 +158,14 @@
             <div id="seats" class="seats"></div>
           </div>
           <div class="game-bottom">
-            <section id="social-bar" class="social-bar" aria-label="桌边互动"></section>
-            <section
-              id="result-panel"
-              class="result-panel"
-              hidden
-              aria-live="polite"
-            ></section>
+            <div class="hand-strip">
+              <section id="self-hand-panel" class="self-hand-panel" aria-label="我的手牌" hidden></section>
+              <div class="settlement-strip" id="settlement-strip" hidden>
+                <div id="settlement-summary" aria-live="polite"></div>
+                <button class="icon-button" id="result-toggle" title="查看本手结算" aria-label="查看本手结算"><i data-lucide="list-end"></i></button>
+              </div>
+              <span class="table-ready" id="table-ready">等待玩家入座</span>
+            </div>
             <section
               id="action-panel"
               class="action-panel"
@@ -169,7 +184,8 @@
                 </div>
               </div>
               <div id="betting-controls" class="betting-controls" hidden>
-                <div class="raise-control">
+                <div class="raise-control" id="raise-editor" aria-label="调整下注" hidden>
+                  <div class="raise-heading"><strong>调整下注</strong><button class="icon-button" id="close-raise" title="关闭加注面板" aria-label="关闭加注面板"><i data-lucide="x"></i></button></div>
                   <div class="raise-label">
                     <label for="raise-amount">加注至</label>
                     <div class="raise-input-wrap">
@@ -197,26 +213,40 @@
                     ><button data-preset="pot">底池</button
                     ><button data-preset="max">全下</button>
                   </div>
+                  <button class="button primary" id="raise-button"><i data-lucide="check"></i><span>确认加注</span></button>
                 </div>
                 <div class="action-buttons">
                   <button class="button fold" id="fold-button">
                     <i data-lucide="x"></i>弃牌</button
                   ><button class="button secondary" id="call-button">
                     <i data-lucide="check"></i><span>过牌</span></button
-                  ><button class="button primary" id="raise-button">
+                  ><button class="button primary" id="raise-toggle">
                     <i data-lucide="arrow-up"></i><span>加注</span></button
                   ><button class="button all-in" id="all-in-button">
                     <i data-lucide="layers"></i>全下
                   </button>
                 </div>
               </div>
+              <div class="idle-controls" id="idle-controls">
+                <button class="button secondary" id="quick-invite"><i data-lucide="user-round-plus"></i><span>邀请好友</span></button>
+                <button class="button primary" id="quick-start" hidden><i data-lucide="play"></i><span>开始牌局</span></button>
+                <button class="button secondary" id="quick-rebuy" hidden><i data-lucide="coins"></i><span>补充筹码</span></button>
+                <div class="show-cards-row" id="show-cards-row" hidden><button class="button secondary" id="show-cards-button"><i data-lucide="eye"></i><span>亮牌</span></button></div>
+                <span id="idle-message"></span>
+              </div>
             </section>
+            <section id="social-bar" class="social-bar" aria-label="桌边互动"></section>
             <div class="table-footnote">
               <span><i data-lucide="lock-keyhole"></i>私人牌桌</span
               ><span id="last-event">同桌 · TEXAS HOLD'EM</span>
             </div>
           </div>
         </main>
+        <div class="table-overlay-backdrop" id="result-backdrop" hidden></div>
+        <aside id="result-drawer" class="result-drawer" aria-label="本手结算" hidden>
+          <div class="drawer-heading"><h2>本手结算</h2><button class="icon-button" id="close-result" title="关闭结算" aria-label="关闭结算"><i data-lucide="x"></i></button></div>
+          <section id="result-panel" class="result-panel" hidden aria-live="polite"></section>
+        </aside>
       </div>
     </div>
     <div class="drawer-backdrop" id="history-backdrop" hidden></div>

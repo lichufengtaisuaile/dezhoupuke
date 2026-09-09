@@ -22,6 +22,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
 ProtectHome=read-only
+ReadWritePaths=/home/admin/dezhou-data
 UMask=0077
 SyslogIdentifier=dezhou
 

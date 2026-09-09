@@ -6,7 +6,6 @@
 }
 .home-heading,
 .home-commands,
-.home-identity,
 .home-room-heading,
 .home-filter-row,
 .home-card-top,
@@ -24,30 +23,6 @@
 .home-commands { gap: 10px; flex-shrink: 0; }
 .home-commands .button { min-height: 44px; }
 .home-commands .secondary { background: #292e30; border-color: #485051; color: #d4ddda; }
-.home-identity {
-  justify-content: flex-start;
-  gap: 15px;
-  padding: 14px 0;
-  border-top: 1px solid #343d3a;
-  border-bottom: 1px solid #343d3a;
-}
-.home-avatar {
-  display: grid;
-  place-items: center;
-  width: 45px;
-  height: 45px;
-  border-radius: 50%;
-  background: #343034;
-  color: #d6aeb5;
-  flex-shrink: 0;
-}
-.home-avatar svg { width: 22px; height: 22px; }
-.home-name-field { display: flex; align-items: center; gap: 17px; min-width: 0; }
-.home-name-field label { font-size: 12px; color: #b4bdb8; flex-shrink: 0; }
-.home-name-field input { max-width: 232px; background: #252a2c; }
-.home-live-meta { margin-left: auto; display: flex; align-items: center; gap: 7px; color: #98a5a0; font-size: 12px; flex-shrink: 0; }
-.home-live-dot { width: 6px; height: 6px; border-radius: 50%; background: #bfa06d; }
-.is-connected .home-live-dot { background: #72c99d; }
 .home-rooms { padding-top: 20px; }
 .home-room-heading { gap: 12px; margin-bottom: 12px; }
 .home-room-heading h2 { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 600; }
@@ -153,12 +128,6 @@
   .home-heading h1 { font-size: 26px; }
   .home-commands { width: 100%; justify-content: flex-start; }
   .home-commands .button { flex: 1; padding: 10px 11px; }
-  .home-identity { gap: 12px; padding: 18px 0; flex-wrap: wrap; }
-  .home-avatar { width: 39px; height: 39px; }
-  .home-name-field { gap: 7px; flex: 1; flex-direction: column; align-items: stretch; }
-  .home-name-field label { font-size: 11px; }
-  .home-name-field input { max-width: none; height: 39px; }
-  .home-live-meta { margin-left: 0; font-size: 10px; gap: 5px; }
   .home-rooms { padding-top: 24px; }
   .home-filter-row { flex-direction: column; align-items: stretch; gap: 13px; margin-bottom: 18px; }
   .home-filters { align-self: flex-start; }
@@ -175,7 +144,6 @@
 }
 @media (max-width: 370px) {
   .home-view { padding: 23px 15px 30px; }
-  .home-live-meta { display: none; }
   .home-card-main { gap: 15px; }
   .home-table-art { width: 104px; height: 72px; }
   .home-card-info h3 { font-size: 14px; }

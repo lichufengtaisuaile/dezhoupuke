@@ -20,8 +20,11 @@
     bigBlind: "大盲",
   };
   const storageKey = "tongzhuo-session";
+  const auth = window.tongzhuoAuth;
   let state = null;
   let session = null;
+  let socket = null;
+  let pendingInviteCode = null;
   let pending = false;
   let toastTimeout;
   let previousTurn = "";
@@ -31,6 +34,7 @@
   let settlementReady = false;
   const dealing = window.createDealingEffects($("table-stage"), $("card-deck"));
   const chips = window.createChipEffects($("table-stage"));
+  const celebration = window.createHandCelebration($("table-stage"));
   const audio = window.createTableAudio({
     button: $("sound-button"), volumeInput: $("sound-volume"), notify: toast,
   });
@@ -40,12 +44,59 @@
   } catch {
     sessionStorage.removeItem(storageKey);
   }
-  const socket = io({ reconnection: true });
+  function socketConnected() {
+    return Boolean(socket && socket.connected);
+  }
+  function connectSocket() {
+    const account = auth.get();
+    if (!account || socket) return;
+    socket = io({ reconnection: true, auth: { token: account.token } });
+    socket.on("connect", onSocketConnect);
+    socket.on("disconnect", onSocketDisconnect);
+    socket.on("connect_error", onSocketConnectError);
+    socket.on("room:state", onRoomState);
+    socket.on("lobby:state", data => {
+      if (!state) updateLobbyRooms(data.rooms);
+    });
+    socket.on("room:reaction", event => social.receive(event));
+    socket.on("room:closed", (data) => {
+      clearSession();
+      toast(data?.reason || "房间已关闭", true);
+    });
+    socket.on("session:replaced", (data) => {
+      clearSession();
+      toast(data?.reason || "你的座位已在其他页面登录", true);
+    });
+  }
+  function teardownSocket() {
+    if (!socket) return;
+    socket.removeAllListeners();
+    socket.disconnect();
+    socket = null;
+  }
   const lobby = window.createLobby({
     root: $("home-view"),
     onCreate: payload => enterRoom("room:create", payload),
     onJoin: payload => enterRoom("room:join", payload),
     onRefresh: refreshLobby,
+    onRequireAuth: (after) => requireAuth(after),
+  });
+  const portal = window.createPortal({
+    root: $("portal-view"),
+    onEnterGame: async (id) => {
+      if (id === "slots") {
+        location.assign("/slot/");
+        return;
+      }
+      if (id !== "holdem") return;
+      if (!(await requireAuth())) return;
+      location.hash = "#/holdem";
+    },
+    onReturnToTable: (code) => { returnToTable(code); },
+  });
+  const topbar = window.createTopbar({
+    mount: $("topbar-identity"),
+    onRequireAuth: () => requireAuth(),
   });
   const social = window.createSocial({
     root: $("social-bar"), stage: $("table-stage"),
@@ -53,16 +104,161 @@
     onReaction: (_item, event) => audio.reaction(event),
   });
 
+  async function requireAuth(after) {
+    if (auth.get()) {
+      if (after) after();
+      return true;
+    }
+    const ok = await auth.openAuthModal();
+    if (!ok) return false;
+    await handleLoginSuccess();
+    if (after) after();
+    return true;
+  }
+  function currentRoute() {
+    return location.hash === "#/holdem" ? "holdem" : "portal";
+  }
+  function updateLobbyRooms(rooms) {
+    portal.setHoldemOnline(Array.isArray(rooms) ? rooms.length : 0);
+    lobby.updateRooms(rooms);
+  }
+  async function refreshTables() {
+    if (!auth.get()) {
+      portal.setTables([]);
+      return;
+    }
+    try {
+      const data = await auth.api("/api/me/tables");
+      portal.setTables(data.tables || []);
+    } catch {
+      portal.setTables([]);
+    }
+  }
+  async function resumeSeat() {
+    if (!session) return false;
+    const response = await request("room:resume", { code: session.code });
+    if (response) {
+      saveSession(response);
+      return true;
+    }
+    clearSession();
+    return false;
+  }
+  async function returnToTable(code) {
+    saveSession({ code });
+    const alreadyConnected = socketConnected();
+    if (!(await waitForSocket())) {
+      toast("连接失败，请稍后重试", true);
+      return;
+    }
+    // socket 已连接时不会触发 connect 事件，这里直接 resume；
+    // 否则由 onSocketConnect 里的 resumeSeat 完成回桌。
+    if (alreadyConnected && !(await resumeSeat())) refreshTables();
+  }
+
+  function waitForSocket(timeoutMs = 8000) {
+    return new Promise((resolve) => {
+      if (!auth.get()) return resolve(false);
+      if (socketConnected()) return resolve(true);
+      connectSocket();
+      if (!socket) return resolve(false);
+      const onConnect = () => { clearTimeout(timer); resolve(true); };
+      const timer = setTimeout(() => {
+        socket?.off("connect", onConnect);
+        resolve(socketConnected());
+      }, timeoutMs);
+      socket.once("connect", onConnect);
+    });
+  }
+  async function refreshAccountBalance() {
+    const account = await auth.refreshBalance();
+    if (account) topbar.setAccount(account);
+    portal.setLoggedIn(Boolean(account));
+    renderRoom();
+    window.dispatchEvent(new CustomEvent("tongzhuo:balance"));
+    return account;
+  }
+  async function handleLoginSuccess() {
+    connectSocket();
+    await refreshAccountBalance();
+    refreshWallet();
+    refreshLobby();
+    refreshTables();
+    if (pendingInviteCode) {
+      const code = pendingInviteCode;
+      pendingInviteCode = null;
+      lobby.showInvite(code);
+    }
+  }
+  function handleLogout(reason) {
+    if (!auth.get() && !reason) return;
+    auth.clear(false);
+    teardownSocket();
+    clearSession();
+    topbar.setAccount(null);
+    portal.setLoggedIn(false);
+    refreshLobby();
+    refreshTables();
+    if (reason) toast(reason, true);
+  }
+  async function claimSubsidy() {
+    if (!auth.get()) {
+      const ok = await auth.openAuthModal();
+      if (!ok) return;
+      await handleLoginSuccess();
+    }
+    if (!(await waitForSocket())) return;
+    const response = await exclusive("room:subsidy", {});
+    if (response) {
+      toast("已领取每日补助 2,000 筹码");
+      await refreshAccountBalance();
+    }
+  }
+  window.addEventListener("tongzhuo:claim-subsidy", () => {
+    claimSubsidy().then(() => { renderRoom(); icons(); });
+  });
+  window.addEventListener("tongzhuo:logout", () => handleLogout("登录已过期，请重新登录"));
+  window.addEventListener("tongzhuo:logout-request", () => handleLogout());
+
   async function enterRoom(event, payload) {
+    if (!auth.get()) {
+      const ok = await auth.openAuthModal();
+      if (!ok) return null;
+      await handleLoginSuccess();
+    }
+    await waitForSocket();
     const response = await exclusive(event, payload);
     if (response) saveSession(response);
     else throw new Error($("toast").textContent || "未能进入房间，请重试");
     return response;
   }
   async function refreshLobby() {
-    const response = await request("lobby:list");
-    if (response && !state) lobby.updateRooms(response.rooms);
-    return response;
+    if (state) return null;
+    if (auth.get() && socketConnected()) {
+      const response = await request("lobby:list");
+      if (response && !state) updateLobbyRooms(response.rooms);
+      return response;
+    }
+    try {
+      const data = await auth.api("/api/lobby");
+      lobby.setConnection(true);
+      updateLobbyRooms(data.rooms);
+      return data;
+    } catch {
+      lobby.setConnection(false);
+      return null;
+    }
+  }
+  function refreshWallet() {
+    const panel = $("room-wallet");
+    if (!panel) return;
+    const account = auth.get();
+    const show = Boolean(account && state && !state.practice);
+    panel.hidden = !show;
+    if (show) {
+      $("wallet-balance").textContent = money(account.balance);
+      $("wallet-table").textContent = money(playerSelf()?.stack || 0);
+    }
   }
 
   function icons() {
@@ -106,6 +302,7 @@
   function clearSession() {
     dealing.cancel();
     chips.cancel();
+    celebration.cancel();
     audio.cancel();
     social.cancel();
     tableLayout.reset();
@@ -120,11 +317,12 @@
     history.replaceState(null, "", url);
     $("history-drawer").hidden = $("history-backdrop").hidden = true;
     render();
-    if (socket.connected) refreshLobby();
+    refreshLobby();
+    refreshTables();
   }
   function request(event, payload = {}) {
     return new Promise((resolve) => {
-      if (!socket.connected) {
+      if (!socketConnected()) {
         toast("连接已断开，正在重新连接", true);
         resolve(null);
         return;
@@ -225,13 +423,15 @@
     const inRoom = Boolean(state);
     document.body.classList.toggle("in-room", inRoom);
     document.body.classList.toggle("playing", state?.phase === "playing");
-    if (inRoom && !$("home-view").hidden) lobby.reset();
-    $("home-view").hidden = inRoom;
+    if (inRoom && (!$("home-view").hidden || !$("portal-view").hidden)) lobby.reset();
+    const route = currentRoute();
+    $("portal-view").hidden = inRoom || route !== "portal";
+    $("home-view").hidden = inRoom || route !== "holdem";
     $("game-view").hidden = !inRoom;
     $("history-button").hidden = !inRoom;
     $("room-panel").hidden = !inRoom;
-    lobby.setConnection(socket.connected);
-    social.update(state, socket.connected);
+    lobby.setConnection(socketConnected() || !auth.get());
+    social.update(state, socketConnected());
     if (!state) return;
     $("room-code").textContent = state.code;
     $("table-room-code").textContent = state.code;
@@ -250,26 +450,31 @@
     const host = isHost();
     $("auto-next-control").hidden = !host || typeof state.autoNext !== "boolean";
     $("auto-next").checked = Boolean(state.autoNext);
-    $("auto-next").disabled = pending || !socket.connected;
+    $("auto-next").disabled = pending || !socketConnected();
     const playing = state.phase === "playing";
     const funded = state.players.filter(
       (p) => (p.stack > 0 || p.isBot) && (p.connected || p.isBot),
     ).length;
     $("bot-button").hidden = !host;
     $("bot-button").disabled =
-      playing || state.players.length >= 6 || pending || !socket.connected;
+      playing || state.players.length >= 6 || pending || !socketConnected();
     $("start-button").hidden = !host;
     $("start-button").disabled =
-      playing || funded < 2 || pending || !socket.connected;
+      playing || funded < 2 || pending || !socketConnected();
     $("start-label").textContent = state.handNumber > 0 ? "下一手" : "开始牌局";
-    $("rebuy-button").hidden =
-      playing || !playerSelf() || playerSelf().stack > 0;
-    $("rebuy-button").disabled = pending || !socket.connected;
+    const practice = Boolean(state.practice);
+    const broke = !playing && Boolean(playerSelf()) && playerSelf().stack === 0;
+    $("rebuy-button").hidden = !broke;
+    $("rebuy-button").disabled = pending || !socketConnected();
+    $("rebuy-button").innerHTML = practice
+      ? '<i data-lucide="coins"></i>补充筹码'
+      : '<i data-lucide="gift"></i>领取每日补助';
     $("quick-start").hidden = playing || !host;
     $("quick-start").disabled = $("start-button").disabled;
     $("quick-start").querySelector("span").textContent = $("start-label").textContent;
     $("quick-rebuy").hidden = $("rebuy-button").hidden;
     $("quick-rebuy").disabled = $("rebuy-button").disabled;
+    $("quick-rebuy").querySelector("span").textContent = practice ? "补充筹码" : "领取每日补助";
     $("quick-invite").hidden = state.phase !== "lobby";
     $("room-wait").textContent = playing
       ? ""
@@ -281,6 +486,7 @@
           ? `${funded} 位玩家已就绪`
           : "等待房主开始牌局";
     $("room-wait").hidden = !$("room-wait").textContent;
+    refreshWallet();
   }
   function miniCards(cards) {
     return `<span class="hand-mini-cards">${cards.map(card => cardMarkup(card)).join("")}</span>`;
@@ -358,7 +564,7 @@
     const self = playerSelf();
     $("your-stack").textContent = self ? money(self.stack) : "—";
     $("show-cards-row").hidden = !state?.canShowCards;
-    $("show-cards-button").disabled = pending || !socket.connected;
+    $("show-cards-button").disabled = pending || !socketConnected();
     const myTurn = Boolean(
       state?.phase === "playing" &&
       state.legal &&
@@ -383,14 +589,14 @@
                 : myTurn
                   ? "轮到你行动"
                   : "等待其他玩家行动";
-    if (!socket.connected) message = "正在重新连接…";
+    if (!socketConnected()) message = "正在重新连接…";
     $("turn-message").textContent = message;
     if (!myTurn) {
       $("countdown").textContent = "";
       return;
     }
     const actions = legal.actions || [];
-    const locked = pending || !socket.connected;
+    const locked = pending || !socketConnected();
     $("fold-button").disabled = locked || !actions.includes("fold");
     const canCheck = actions.includes("check");
     $("call-button").disabled =
@@ -446,7 +652,7 @@
     $("raise-slider").value = String(amount);
   }
   function nextHandText() {
-    if (!socket.connected) return "正在重新连接…";
+    if (!socketConnected()) return "正在重新连接…";
     if (state?.nextHandAt) return `${Math.max(0, Math.ceil((state.nextHandAt - Date.now()) / 1000))} 秒后开始下一手`;
     if (state?.autoNext) return "等待至少两位玩家持有筹码";
     return "本手结束，等待下一手";
@@ -537,9 +743,15 @@
     if (state?.canShowCards) await exclusive("game:show-cards", { handNumber: state.handNumber });
   });
   $("rebuy-button").addEventListener("click", async () => {
-    await exclusive("room:rebuy", {});
-    renderRoom();
-    icons();
+    if (state?.practice) {
+      await exclusive("room:rebuy", {});
+      renderRoom();
+      icons();
+    } else {
+      await claimSubsidy();
+      renderRoom();
+      icons();
+    }
   });
   $("quick-start").addEventListener("click", () => $("start-button").click());
   $("quick-rebuy").addEventListener("click", () => $("rebuy-button").click());
@@ -547,13 +759,22 @@
   async function leaveRoom() {
     if (await exclusive("room:leave", {})) {
       clearSession();
+      await refreshAccountBalance();
     }
   }
   $("leave-button").addEventListener("click", leaveRoom);
   document.querySelector(".brand").addEventListener("click", event => {
     event.preventDefault();
     if (state) leaveRoom();
-    else { lobby.reset(); refreshLobby(); }
+    else if (currentRoute() !== "portal") location.hash = "#/";
+    else { lobby.reset(); refreshLobby(); refreshTables(); }
+  });
+  window.addEventListener("hashchange", () => {
+    renderRoom();
+    if (state) return;
+    if (currentRoute() === "holdem") refreshLobby();
+    else refreshTables();
+    icons();
   });
   $("roster").addEventListener("click", async (event) => {
     const target = event.target.closest("[data-interact-player]");
@@ -641,44 +862,46 @@
     if (event.key === "Escape" && !$("history-drawer").hidden)
       toggleHistory(false);
   });
-  socket.on("connect", async () => {
+  async function onSocketConnect() {
     $("connection").classList.add("connected");
     $("connection-label").textContent = "已连接";
     document.body.classList.remove("offline");
     lobby.setConnection(true);
-    if (session) {
-      const response = await request("room:resume", {
-        code: session.code,
-        token: session.token,
-      });
-      if (response) saveSession(response);
-      else clearSession();
-    }
+    if (session) await resumeSeat();
+    await refreshAccountBalance();
     if (!state) await refreshLobby();
+    refreshTables();
     renderRoom();
     renderActions();
     icons();
-  });
-  socket.on("disconnect", () => {
+  }
+  function onSocketDisconnect() {
     skipNextDeal = true;
     dealing.cancel();
     chips.cancel();
+    celebration.cancel();
     audio.cancel();
     tableLayout.reset();
     social.cancel();
     $("connection").classList.remove("connected");
     $("connection-label").textContent = "重连中";
     document.body.classList.add("offline");
+    refreshTables();
     renderRoom();
     renderActions();
-  });
-  socket.on("connect_error", () => {
+  }
+  function onSocketConnectError(error) {
+    if (auth.get() && error?.message && String(error.message).includes("登录")) {
+      teardownSocket();
+      handleLogout("登录已过期，请重新登录");
+      return;
+    }
     $("connection").classList.remove("connected");
     $("connection-label").textContent = "连接中";
     lobby.setConnection(false);
     renderActions();
-  });
-  socket.on("room:state", (next) => {
+  }
+  function onRoomState(next) {
     const previous = state;
     const newSettlement = next.phase === "finished" && (previous?.phase !== "finished" || previous?.handNumber !== next.handNumber || previous?.code !== next.code);
     if (newSettlement || next.phase !== "finished") {
@@ -689,6 +912,7 @@
     state = next;
     render();
     dealing.update(previous, next, !skipNextDeal);
+    celebration.update(previous, next, !skipNextDeal, dealing.remaining());
     chips.update(previous, next, chipPositions, !skipNextDeal, dealing.remaining());
     audio.update(previous, next, !skipNextDeal, dealing.remaining());
     if (newSettlement) {
@@ -698,23 +922,11 @@
         $("settlement-strip").hidden = state?.phase !== "finished";
       }, delay);
     }
-    social.update(next, socket.connected);
+    social.update(next, socketConnected());
     skipNextDeal = false;
-  });
-  socket.on("lobby:state", data => {
-    if (!state) lobby.updateRooms(data.rooms);
-  });
-  socket.on("room:reaction", event => social.receive(event));
-  socket.on("room:closed", (data) => {
-    clearSession();
-    toast(data?.reason || "房间已关闭", true);
-  });
-  socket.on("session:replaced", (data) => {
-    clearSession();
-    toast(data?.reason || "你的座位已在其他页面登录", true);
-  });
+  }
   const queryRoom = new URLSearchParams(location.search).get("room");
-  if (queryRoom && !session) lobby.showInvite(queryRoom.toUpperCase().slice(0, 8));
+  if (queryRoom && !session) pendingInviteCode = queryRoom.toUpperCase().slice(0, 8);
   fetch("/api/network")
     .then((response) => response.json())
     .then((data) => {
@@ -734,5 +946,17 @@
       $("network-addresses").textContent = location.host;
     });
   render();
+  topbar.setAccount(auth.get());
+  portal.setLoggedIn(Boolean(auth.get()));
+  if (auth.get()) {
+    connectSocket();
+  } else if (currentRoute() === "holdem") {
+    refreshLobby();
+  } else {
+    refreshTables();
+  }
   setInterval(updateCountdown, 1000);
+  setInterval(() => {
+    if (!auth.get() && !state && !document.hidden) refreshLobby();
+  }, 12000);
 })();

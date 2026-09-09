@@ -1,5 +1,35 @@
 (() => {
   "use strict";
+  function findReactionPlacement({ anchor, width, height, bounds, obstacles }) {
+    const margin = 4;
+    const gap = 6;
+    if (width > bounds.width - margin * 2 || height > bounds.height - margin * 2) return null;
+    const centerX = (anchor.left + anchor.right) / 2;
+    const centerY = (anchor.top + anchor.bottom) / 2;
+    const xs = [centerX - width / 2, anchor.left - width - gap, anchor.right + gap, margin, bounds.width - width - margin];
+    const ys = [centerY - height / 2, anchor.top - height - gap, anchor.bottom + gap, margin, bounds.height - height - margin];
+    // Obstacle edges supply nearby empty positions even when seats are tightly packed.
+    for (const box of obstacles) {
+      xs.push(box.left - width - gap, box.right + gap);
+      ys.push(box.top - height - gap, box.bottom + gap);
+    }
+    const candidatesX = [...new Set(xs.map(x => Math.max(margin, Math.min(bounds.width - width - margin, x))))];
+    const candidatesY = [...new Set(ys.map(y => Math.max(margin, Math.min(bounds.height - height - margin, y))))];
+    const maxDistance = Math.max(120, Math.min(180, bounds.width * .4));
+    let best = null;
+    let bestScore = Infinity;
+    for (const x of candidatesX) for (const y of candidatesY) {
+      const dx = x + width / 2 - centerX;
+      const dy = y + height / 2 - centerY;
+      const score = dx * dx + dy * dy;
+      if (score >= bestScore || score > maxDistance * maxDistance) continue;
+      if (obstacles.some(box => x < box.right + margin && x + width > box.left - margin && y < box.bottom + margin && y + height > box.top - margin)) continue;
+      best = { x, y };
+      bestScore = score;
+    }
+    return best;
+  }
+  window.findReactionPlacement = findReactionPlacement;
   window.createSocial = function ({ root, stage, send, notify, onReaction }) {
     const catalog = window.HOLDEM_REACTIONS;
     const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -160,17 +190,42 @@
     }
     function placeBubble(id, bubble) {
       const seat = findSeat(id);
-      const pos = point(id);
-      if (!pos || !seat) return;
-      const centerSeat = seat.classList.contains("position-0") || seat.classList.contains("position-3");
-      const upper = ["position-2", "position-3", "position-4"].some(name => seat.classList.contains(name));
-      const width = Math.min(132, stage.clientWidth * .34);
-      const x = centerSeat ? pos.x + (stage.clientWidth < 600 ? 92 : 140) : pos.x;
-      const y = centerSeat ? pos.y - 22 : upper ? pos.top - 66 : pos.bottom + 22;
-      Object.assign(bubble.style, {
-        width: `${width}px`, left: `${Math.max(4, Math.min(stage.clientWidth - width - 4, x - width / 2))}px`,
-        top: `${Math.max(3, Math.min(stage.clientHeight - 46, y))}px`,
+      const avatar = seat?.querySelector(".seat-avatar");
+      if (!avatar) { bubble.style.visibility = "hidden"; return; }
+      // Always measure the normal bubble, including after a compact avatar fallback.
+      for (const property of ["width", "height", "min-height", "font-size", "line-height", "background", "border-radius"]) bubble.style.removeProperty(property);
+      const table = stage.getBoundingClientRect();
+      function localBox(node) {
+        const box = node.getBoundingClientRect();
+        return { left: box.left - table.left, right: box.right - table.left, top: box.top - table.top, bottom: box.bottom - table.top };
+      }
+      const protectedNodes = stage.querySelectorAll(".seat-body, .seat-avatar, .seat-cards, [data-card-key], .seat-bet, .seat-status, .table-center, .card-deck, [data-social-obstacle]");
+      const obstacles = [...protectedNodes].filter(node => {
+        const style = getComputedStyle(node);
+        const box = node.getBoundingClientRect();
+        const reservedCard = node.hasAttribute("data-card-key");
+        return style.display !== "none" && (reservedCard || (style.visibility !== "hidden" && style.opacity !== "0")) && box.width > 0 && box.height > 0;
+      }).map(localBox);
+      for (const node of bubbles.values()) {
+        if (node === bubble || node.style.visibility === "hidden") continue;
+        const left = parseFloat(node.style.left), top = parseFloat(node.style.top);
+        obstacles.push({ left, top, right: left + node.offsetWidth, bottom: top + node.offsetHeight });
+      }
+      const placement = findReactionPlacement({
+        anchor: localBox(avatar), width: bubble.offsetWidth, height: bubble.offsetHeight,
+        bounds: { width: stage.clientWidth, height: stage.clientHeight }, obstacles,
       });
+      if (!placement && bubble.classList.contains("reaction-emoji")) {
+        const box = localBox(avatar);
+        const size = Math.min(44, box.right - box.left, box.bottom - box.top);
+        Object.assign(bubble.style, { visibility: "visible", width: `${size}px`, height: `${size}px`,
+          minHeight: `${size}px`, fontSize: `${size - 4}px`, lineHeight: `${size}px`,
+          left: `${box.left + (box.right - box.left - size) / 2}px`, top: `${box.top + (box.bottom - box.top - size) / 2}px`,
+          background: "#192c2b", borderRadius: "50%" });
+        return;
+      }
+      bubble.style.visibility = placement ? "visible" : "hidden";
+      if (placement) Object.assign(bubble.style, { left: `${placement.x}px`, top: `${placement.y}px` });
     }
     function bubble(id, text, emoji = false) {
       if (!state?.players.some(player => player.id === id && player.connected) || !point(id)) return;

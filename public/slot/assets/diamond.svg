@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="钻石">
+  <path fill="#71d8ef" stroke="#171615" stroke-linejoin="round" stroke-width="7" d="M25 58 50 28h60l25 30-55 74z"/>
+  <path fill="#dff9ff" stroke="#171615" stroke-linejoin="round" stroke-width="5" d="m25 58 55 74 55-74-33 14H58z"/>
+  <path fill="none" stroke="#171615" stroke-linejoin="round" stroke-width="5" d="m50 28 8 44 22-44 22 44 8-44M25 58h110"/>
+</svg>

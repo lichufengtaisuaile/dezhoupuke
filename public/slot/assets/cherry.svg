@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="樱桃">
+  <path fill="none" stroke="#277d5e" stroke-linecap="round" stroke-width="8" d="M53 91c4-37 19-52 43-62M109 93c-1-26-5-47-13-64"/>
+  <path fill="#47d7ac" stroke="#171615" stroke-linejoin="round" stroke-width="6" d="M96 29c15-15 32-14 43-7-11 18-27 22-43 7z"/>
+  <circle cx="50" cy="105" r="29" fill="#e43b45" stroke="#171615" stroke-width="7"/>
+  <circle cx="110" cy="106" r="29" fill="#d8233a" stroke="#171615" stroke-width="7"/>
+  <path fill="none" stroke="#ff98a0" stroke-linecap="round" stroke-width="7" d="M36 94c4-7 10-10 17-10M96 95c4-7 10-10 17-10"/>
+</svg>

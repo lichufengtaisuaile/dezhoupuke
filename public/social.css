@@ -58,6 +58,8 @@
 .social-layer { position: absolute; inset: 0; pointer-events: none; z-index: 14; }
 .reaction-bubble {
   position: absolute;
+  width: max-content;
+  max-width: 132px;
   min-height: 40px;
   display: grid;
   place-items: center;
@@ -70,14 +72,16 @@
   font-size: 12px;
   line-height: 20px;
   text-align: center;
+  overflow-wrap: anywhere;
+  transform-origin: center;
   animation: reaction-pop 3400ms ease both;
 }
-.reaction-bubble.reaction-emoji { font-size: 31px; line-height: 38px; padding: 0; background: transparent; border: 0; box-shadow: none; font-family: "Segoe UI Emoji", "Apple Color Emoji", sans-serif; }
+.reaction-bubble.reaction-emoji { width: 44px; height: 44px; font-size: 31px; line-height: 38px; padding: 0; background: transparent; border: 0; box-shadow: none; font-family: "Segoe UI Emoji", "Apple Color Emoji", sans-serif; }
 .gift-flight { position: absolute; font: 42px/48px "Segoe UI Emoji", "Apple Color Emoji", sans-serif; width: 48px; height: 48px; filter: drop-shadow(0 4px 4px #0005); will-change: transform; }
 @keyframes reaction-pop {
-  0% { opacity: 0; transform: translateY(8px) scale(.72); }
-  9%, 83% { opacity: 1; transform: translateY(0) scale(1); }
-  100% { opacity: 0; transform: translateY(-6px) scale(.97); }
+  0% { opacity: 0; transform: scale(.72); }
+  9%, 83% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(.97); }
 }
 @media (max-width: 680px) {
   .social-heading { display: none; }

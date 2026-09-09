@@ -17,6 +17,8 @@
     <link rel="stylesheet" href="/hand-info.css" />
     <link rel="stylesheet" href="/table-layout.css" />
     <link rel="stylesheet" href="/table-landscape.css" />
+    <link rel="stylesheet" href="/celebration.css" />
+    <link rel="stylesheet" href="/account.css" />
     <script src="/socket.io/socket.io.js" defer></script>
     <script src="/vendor/lucide.js" defer></script>
     <script src="/dealing.js" defer></script>
@@ -28,6 +30,9 @@
     <script src="/avatars.js" defer></script>
     <script src="/audio.js" defer></script>
     <script src="/table-layout.js" defer></script>
+    <script src="/celebration.js" defer></script>
+    <script src="/account.js" defer></script>
+    <script src="/portal.js" defer></script>
     <script src="/app.js" defer></script>
   </head>
   <body>
@@ -40,6 +45,7 @@
           ></a
         >
         <div class="topbar-right">
+          <div class="topbar-identity" id="topbar-identity"></div>
           <span class="play-money">休闲筹码</span>
           <div class="sound-controls">
             <button class="icon-button" id="sound-button" aria-label="开启音效" title="开启音效" aria-pressed="false"><i data-lucide="volume-x"></i></button>
@@ -58,6 +64,7 @@
           </button>
         </div>
       </header>
+      <main id="portal-view" hidden></main>
       <main id="home-view"></main>
       <div class="workspace" id="game-view" hidden>
         <div class="table-overlay-backdrop" id="room-backdrop" hidden></div>
@@ -78,6 +85,10 @@
             </div>
             <div class="room-meta">
               <span id="room-blinds"></span><span id="player-count"></span>
+            </div>
+            <div class="room-wallet" id="room-wallet" hidden>
+              <div class="room-wallet-item"><span>钱包余额</span><strong id="wallet-balance">—</strong></div>
+              <div class="room-wallet-item"><span>桌上筹码</span><strong id="wallet-table">—</strong></div>
             </div>
             <div class="invite-actions">
               <button class="button secondary" id="copy-button">
@@ -136,7 +147,7 @@
             </div>
           </div>
           <div class="table-stage" id="table-stage">
-            <div class="card-deck" id="card-deck" aria-label="牌堆">
+            <div class="card-deck" id="card-deck" aria-hidden="true">
               <span class="deck-card"></span><span class="deck-card"></span><span class="deck-card"></span>
             </div>
             <div class="poker-table">

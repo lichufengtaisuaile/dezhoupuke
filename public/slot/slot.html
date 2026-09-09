@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#e43b45" />
+    <meta name="description" content="同桌平台红金复古街机老虎机，共享钱包筹码，服务端开奖" />
+    <title>好运制造局 | 同桌老虎机</title>
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="../lobby.css" />
+    <link rel="stylesheet" href="../account.css" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="page-pattern" aria-hidden="true"></div>
+
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="/#/" aria-label="返回同桌门户"
+          ><span class="brand-mark">♠</span
+          ><span
+            ><strong>同桌</strong><span class="brand-sub">老虎机</span></span
+          ></a
+        >
+        <div class="topbar-right">
+          <div class="topbar-identity" id="topbar-identity"></div>
+          <a class="slot-back" href="/#/"><i data-lucide="arrow-left"></i>返回门户</a>
+          <button
+            class="icon-button"
+            id="soundToggle"
+            type="button"
+            aria-label="关闭音效"
+            aria-pressed="true"
+            title="切换音效"
+          >
+            <span class="sound-glyph" aria-hidden="true">♪</span>
+          </button>
+        </div>
+      </header>
+
+      <main class="game-shell">
+        <div class="game-layout">
+          <aside class="side-panel paytable-panel" aria-labelledby="paytableTitle">
+            <div class="panel-heading">
+              <span class="panel-index">01</span>
+              <h2 id="paytableTitle">赔付表</h2>
+            </div>
+            <ul class="paytable-list">
+              <li>
+                <span class="mini-symbols" role="img" aria-label="三枚幸运 7">
+                  <img src="assets/seven.svg" alt="" /><img src="assets/seven.svg" alt="" /><img src="assets/seven.svg" alt="" />
+                </span>
+                <strong>50×</strong>
+              </li>
+              <li>
+                <span class="mini-symbols" role="img" aria-label="三枚钻石">
+                  <img src="assets/diamond.svg" alt="" /><img src="assets/diamond.svg" alt="" /><img src="assets/diamond.svg" alt="" />
+                </span>
+                <strong>30×</strong>
+              </li>
+              <li>
+                <span class="mini-symbols" role="img" aria-label="三枚金铃">
+                  <img src="assets/bell.svg" alt="" /><img src="assets/bell.svg" alt="" /><img src="assets/bell.svg" alt="" />
+                </span>
+                <strong>15×</strong>
+              </li>
+              <li>
+                <span class="mini-symbols" role="img" aria-label="三枚 BAR">
+                  <img src="assets/bar.svg" alt="" /><img src="assets/bar.svg" alt="" /><img src="assets/bar.svg" alt="" />
+                </span>
+                <strong>10×</strong>
+              </li>
+              <li>
+                <span class="mini-symbols" role="img" aria-label="三枚樱桃">
+                  <img src="assets/cherry.svg" alt="" /><img src="assets/cherry.svg" alt="" /><img src="assets/cherry.svg" alt="" />
+                </span>
+                <strong>8×</strong>
+              </li>
+              <li class="text-rule"><span>任意三同</span><strong>6×</strong></li>
+              <li class="text-rule"><span>任意一对</span><strong>2×</strong></li>
+            </ul>
+          </aside>
+
+          <section class="machine-stage" aria-label="老虎机">
+            <div class="machine-cabinet" id="machineCabinet">
+              <div class="marquee">
+                <span class="marquee-bulbs" aria-hidden="true"></span>
+                <div class="marquee-copy">
+                  <span>LUCKY</span>
+                  <strong>7</strong>
+                  <span>DRAW</span>
+                </div>
+                <span class="marquee-bulbs is-reversed" aria-hidden="true"></span>
+              </div>
+
+              <div class="machine-face">
+                <div class="status-strip">
+                  <span class="status-kicker" id="statusKicker">本局</span>
+                  <div>
+                    <strong id="statusTitle">准备好了</strong>
+                    <span id="statusDetail">今日手气正在升温</span>
+                  </div>
+                  <span class="max-win">MAX 50×</span>
+                </div>
+
+                <div class="reels-frame" id="reelsFrame">
+                  <div class="payline payline-left" aria-hidden="true"></div>
+                  <div class="reel-window" data-reel="0">
+                    <div class="reel-strip"></div>
+                  </div>
+                  <div class="reel-window" data-reel="1">
+                    <div class="reel-strip"></div>
+                  </div>
+                  <div class="reel-window" data-reel="2">
+                    <div class="reel-strip"></div>
+                  </div>
+                  <div class="payline payline-right" aria-hidden="true"></div>
+                </div>
+
+                <div class="control-deck">
+                  <div class="bet-control" aria-labelledby="betLabel">
+                    <span id="betLabel">下注</span>
+                    <div class="bet-options" role="group" aria-label="选择下注额">
+                      <button type="button" data-bet="50">50</button>
+                      <button type="button" data-bet="100" class="is-active" aria-pressed="true">100</button>
+                      <button type="button" data-bet="200">200</button>
+                      <button type="button" data-bet="500">500</button>
+                    </div>
+                    <div class="bet-custom">
+                      <input id="customBet" type="number" min="10" max="100000" step="10" inputmode="numeric" placeholder="自定义" aria-label="自定义下注金额">
+                      <button id="customBetApply" type="button">确定</button>
+                    </div>
+                  </div>
+
+                  <button class="spin-button" id="spinButton" type="button">
+                    <span class="spin-light" aria-hidden="true"></span>
+                    <span id="spinButtonLabel">开奖</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="coin-tray" aria-hidden="true">
+                <span></span><span></span><span></span><span></span><span></span>
+              </div>
+            </div>
+
+            <button
+              class="lever"
+              id="lever"
+              type="button"
+              aria-label="下拉摇杆开奖"
+              title="下拉摇杆开奖"
+            >
+              <span class="lever-arm" aria-hidden="true">
+                <span class="lever-knob"></span>
+                <span class="lever-shaft"></span>
+              </span>
+              <span class="lever-base" aria-hidden="true"><span></span></span>
+            </button>
+          </section>
+
+          <aside class="side-panel history-panel" aria-labelledby="historyTitle">
+            <div class="panel-heading">
+              <span class="panel-index">02</span>
+              <h2 id="historyTitle">最近开奖</h2>
+            </div>
+            <ol class="history-list" id="historyList"></ol>
+            <p class="slot-broke-hint" id="brokeHint" hidden>
+              筹码不足？回到门户，总资产低于 2,000 可领取每日补助 2,000。
+              <a href="/#/">前往门户领取</a>
+            </p>
+          </aside>
+        </div>
+
+        <footer class="game-footer">
+          <span>仅供娱乐 · 不涉及真实货币</span>
+          <span>ROUND 01 · 同桌平台</span>
+        </footer>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status" hidden></div>
+    <div class="sr-only" id="liveRegion" aria-live="polite" aria-atomic="true"></div>
+    <script src="/vendor/lucide.js"></script>
+    <script src="../account.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

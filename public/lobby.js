@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  window.createLobby = function ({ root, onCreate, onJoin, onRefresh }) {
+  window.createLobby = function ({ root, onCreate, onJoin, onRefresh, onRequireAuth }) {
     let rooms = [];
     let connected = false;
     let pending = false;
@@ -19,30 +19,22 @@
     const icons = () => window.lucide?.createIcons();
     const get = (name) => root.querySelector(`[data-lobby="${name}"]`);
     const busy = () => pending || submitting;
+    const loggedIn = () => Boolean(window.tongzhuoAuth?.get());
     const phaseText = (room) => room.phase === "playing" ? "对局中" : room.phase === "finished" ? "等待下一手" : "等待开局";
-    let savedName = "";
-    try { savedName = localStorage.getItem("tongzhuo-name") || ""; } catch { /* Storage may be disabled. */ }
+    const BRING_IN_MAX = 100000;
 
     root.classList.add("home-view");
     root.innerHTML = `
       <section class="home-heading" aria-labelledby="home-title">
         <div class="home-title-group">
           <span class="home-overline">同桌 · 德州扑克</span>
-          <h1 id="home-title">房间大厅</h1>
+          <h1 id="home-title">德州大厅</h1>
         </div>
         <div class="home-commands">
+          <button class="button secondary" type="button" data-lobby="back-portal">${icon("house")}<span>返回门户</span></button>
           <button class="button secondary" type="button" data-lobby="open-join">${icon("hash")}<span>房间号加入</span></button>
           <button class="button primary" type="button" data-lobby="open-create">${icon("plus")}<span>创建房间</span></button>
         </div>
-      </section>
-
-      <section class="home-identity" aria-label="玩家资料">
-        <div class="home-avatar" aria-hidden="true">${icon("user-round")}</div>
-        <div class="home-name-field">
-          <label for="home-nickname">你的昵称</label>
-          <input id="home-nickname" data-lobby="nickname" autocomplete="nickname" maxlength="12" value="${esc(savedName)}" placeholder="牌桌上的名字" />
-        </div>
-        <div class="home-live-meta"><span class="home-live-dot"></span><span data-lobby="connection">连接中</span></div>
       </section>
 
       <section class="home-rooms" aria-labelledby="home-rooms-heading">
@@ -65,13 +57,15 @@
       <dialog class="home-dialog" data-lobby="create-dialog" aria-labelledby="home-create-title">
         <div class="home-dialog-heading"><h2 id="home-create-title">创建房间</h2><button type="button" class="icon-button" data-close="create-dialog" aria-label="关闭创建房间" title="关闭">${icon("x")}</button></div>
         <form data-lobby="create-form" class="home-dialog-form" autocomplete="off">
-          <label for="home-create-name">你的昵称</label>
-          <div class="input-wrap">${icon("user-round")}<input id="home-create-name" name="name" maxlength="12" autocomplete="nickname" required /></div>
           <div class="form-pair">
             <div><label for="home-blinds">小盲 / 大盲</label><select id="home-blinds" name="blinds"><option value="10,20">10 / 20</option><option value="25,50">25 / 50</option><option value="50,100">50 / 100</option></select></div>
             <div><label for="home-buy-in">初始筹码</label><select id="home-buy-in" name="buyIn"><option value="2000">2,000</option><option value="5000">5,000</option><option value="10000">10,000</option></select></div>
           </div>
-          <div class="home-create-summary"><span>${icon("users-round")}2–6 人</span><span>${icon("coins")}无限注</span><span>休闲筹码</span></div>
+          <label for="home-create-bring-in">带入金额</label>
+          <div class="input-wrap">${icon("coins")}<input id="home-create-bring-in" name="bringIn" type="number" inputmode="numeric" min="400" max="100000" step="1" required /></div>
+          <p class="home-bring-in-hint" data-lobby="create-bring-in-hint"></p>
+          <label class="home-practice-check"><input type="checkbox" name="practice" /><span>练习模式</span></label>
+          <p class="home-practice-note" data-lobby="practice-note" hidden>练习筹码免费发放，不计入钱包、战绩与排行榜</p>
           <p class="home-dialog-error" data-lobby="create-error" role="alert" hidden></p>
           <button type="submit" class="button primary full">${icon("plus")}创建牌桌</button>
         </form>
@@ -80,19 +74,53 @@
       <dialog class="home-dialog" data-lobby="join-dialog" aria-labelledby="home-join-title">
         <div class="home-dialog-heading"><h2 id="home-join-title">加入房间</h2><button type="button" class="icon-button" data-close="join-dialog" aria-label="关闭加入房间" title="关闭">${icon("x")}</button></div>
         <form data-lobby="join-form" class="home-dialog-form" autocomplete="off">
-          <label for="home-join-name">你的昵称</label>
-          <div class="input-wrap">${icon("user-round")}<input id="home-join-name" name="name" maxlength="12" autocomplete="nickname" required /></div>
           <label for="home-join-code">房间号</label>
           <div class="input-wrap">${icon("hash")}<input id="home-join-code" name="code" minlength="6" maxlength="6" pattern="[A-Za-z0-9]{6}" placeholder="6 位房间号" autocapitalize="characters" spellcheck="false" required /></div>
           <p class="home-join-detail" data-lobby="join-detail" hidden></p>
+          <label for="home-join-bring-in">带入金额</label>
+          <div class="input-wrap">${icon("coins")}<input id="home-join-bring-in" name="bringIn" type="number" inputmode="numeric" min="400" max="100000" step="1" required /></div>
+          <p class="home-bring-in-hint" data-lobby="join-bring-in-hint"></p>
           <p class="home-dialog-error" data-lobby="join-error" role="alert" hidden></p>
           <button type="submit" class="button primary full">${icon("log-in")}加入牌桌</button>
         </form>
       </dialog>`;
 
-    function rememberName(value) {
-      get("nickname").value = value;
-      try { localStorage.setItem("tongzhuo-name", value); } catch { /* Storage may be disabled. */ }
+    async function ensureAuth(after) {
+      if (loggedIn()) {
+        if (after) after();
+        return true;
+      }
+      if (!onRequireAuth) return false;
+      return Boolean(await onRequireAuth(after));
+    }
+
+    function bringInRange(bigBlind) {
+      return { min: Number(bigBlind) * 20, max: BRING_IN_MAX };
+    }
+    function syncCreateBringIn() {
+      const form = get("create-form");
+      const [, bigBlind] = form.elements.blinds.value.split(",").map(Number);
+      const { min, max } = bringInRange(bigBlind);
+      form.elements.bringIn.min = String(min);
+      form.elements.bringIn.max = String(max);
+      get("create-bring-in-hint").textContent = `范围 ${number(min)} – ${number(max)}，从钱包余额中扣除；默认等于初始筹码`;
+      get("practice-note").hidden = !form.elements.practice.checked;
+    }
+    function syncJoinBringIn() {
+      const form = get("join-form");
+      const room = rooms.find((item) => item.code === form.elements.code.value);
+      const { min, max } = bringInRange(room?.bigBlind ?? 20);
+      form.elements.bringIn.min = String(min);
+      form.elements.bringIn.max = String(max);
+      get("join-bring-in-hint").textContent = `范围 ${number(min)} – ${number(max)}，从钱包余额中扣除${room ? `；默认 ${number(room.buyIn)}` : ""}`;
+    }
+    function validBringIn(form, bigBlind) {
+      const { min, max } = bringInRange(bigBlind);
+      const value = Number(form.elements.bringIn.value);
+      if (!Number.isSafeInteger(value) || value < min || value > max) {
+        return `带入金额需要是 ${number(min)}–${number(max)} 之间的整数`;
+      }
+      return "";
     }
 
     function tableMarkup(room) {
@@ -127,7 +155,7 @@
         const full = room.playerCount >= room.maxPlayers;
         const playing = room.phase === "playing";
         return `<article class="home-room-card${full ? " is-full" : ""}" aria-label="${esc(room.hostName)}的牌桌，房间 ${esc(room.code)}">
-          <div class="home-card-top"><span class="home-room-phase${playing ? " is-playing" : ""}"><span></span>${phaseText(room)}</span><span class="home-code">#${esc(room.code)}</span></div>
+          <div class="home-card-top"><span class="home-room-phase${playing ? " is-playing" : ""}"><span></span>${phaseText(room)}</span>${room.practice ? '<span class="home-practice-badge">练习桌</span>' : ""}<span class="home-code">#${esc(room.code)}</span></div>
           <div class="home-card-main">${tableMarkup(room)}<div class="home-card-info"><h3 title="${esc(room.hostName)}">${esc(room.hostName)}的牌桌</h3><span class="home-room-host">${icon("crown")}<span>${esc(room.hostName)}</span></span></div></div>
           <dl class="home-card-stakes"><div><dt>小盲 / 大盲</dt><dd>${number(room.smallBlind)} <span>/</span> ${number(room.bigBlind)}</dd></div><div><dt>初始筹码</dt><dd>${number(room.buyIn)}</dd></div></dl>
           <div class="home-card-bottom"><span class="home-occupancy">${icon("users-round")}<strong>${number(room.playerCount)}</strong><span>/ ${number(room.maxPlayers)} 人</span></span><button type="button" class="button ${full ? "secondary" : "primary"}" data-room-code="${esc(room.code)}"${full || busy() ? " disabled" : ""}>${icon(full ? "lock-keyhole" : "log-in")}${full ? "已满员" : "加入牌桌"}</button></div>
@@ -154,43 +182,59 @@
     function openDialog(kind, code = "") {
       const dialog = get(`${kind}-dialog`);
       const form = get(`${kind}-form`);
-      form.elements.name.value = get("nickname").value;
-      form.elements.name.setCustomValidity("");
       get(`${kind}-error`).hidden = true;
       if (kind === "join") {
         form.elements.code.value = String(code).trim().toUpperCase();
         updateJoinDetail();
+      } else {
+        syncCreateBringIn();
+        form.elements.bringIn.value = form.elements.buyIn.value;
       }
       if (!dialog.open) dialog.showModal();
-      const target = !form.elements.name.value.trim() ? form.elements.name : kind === "join" && !code ? form.elements.code : form.querySelector('[type="submit"]');
+      const target = kind === "join" && !form.elements.code.value ? form.elements.code : form.elements.bringIn;
       target.focus();
     }
 
     function updateJoinDetail() {
-      const room = rooms.find((item) => item.code === get("join-form").elements.code.value);
+      const form = get("join-form");
+      const room = rooms.find((item) => item.code === form.elements.code.value);
       const detail = get("join-detail");
       detail.hidden = !room;
       detail.textContent = room ? `${room.hostName}的牌桌 · ${phaseText(room)} · ${room.playerCount} / ${room.maxPlayers} 人` : "";
+      syncJoinBringIn();
+      if (room) form.elements.bringIn.value = String(room.buyIn);
     }
 
     async function submit(kind, event) {
       event.preventDefault();
-      if (!connected || busy()) return;
+      if (busy()) return;
+      if (!(await ensureAuth())) return;
+      if (!connected) return;
       const form = get(`${kind}-form`);
-      const name = form.elements.name.value.trim();
-      form.elements.name.setCustomValidity(name ? "" : "请输入昵称");
-      if (!form.reportValidity()) return;
-      rememberName(name);
       submitting = true;
       syncControls();
-      get(`${kind}-error`).hidden = true;
+      const error = get(`${kind}-error`);
+      error.hidden = true;
       try {
         let response;
         if (kind === "create") {
           const [smallBlind, bigBlind] = form.elements.blinds.value.split(",").map(Number);
-          response = await onCreate({ name, smallBlind, bigBlind, buyIn: Number(form.elements.buyIn.value) });
+          const message = validBringIn(form, bigBlind);
+          if (message) throw new Error(message);
+          response = await onCreate({
+            smallBlind, bigBlind,
+            buyIn: Number(form.elements.buyIn.value),
+            bringIn: Number(form.elements.bringIn.value),
+            practice: form.elements.practice.checked === true,
+          });
         } else {
-          response = await onJoin({ name, code: form.elements.code.value.trim().toUpperCase() });
+          const room = rooms.find((item) => item.code === form.elements.code.value);
+          const message = validBringIn(form, room?.bigBlind ?? 20);
+          if (message) throw new Error(message);
+          response = await onJoin({
+            code: form.elements.code.value.trim().toUpperCase(),
+            bringIn: Number(form.elements.bringIn.value),
+          });
         }
         if (response) get(`${kind}-dialog`).close();
       } catch (error) {
@@ -202,16 +246,20 @@
       }
     }
 
-    get("nickname").addEventListener("input", (event) => rememberName(event.target.value));
-    get("open-create").addEventListener("click", () => openDialog("create"));
-    get("open-join").addEventListener("click", () => openDialog("join"));
+    get("open-create").addEventListener("click", () => ensureAuth(() => openDialog("create")));
+    get("open-join").addEventListener("click", () => ensureAuth(() => openDialog("join")));
+    get("back-portal").addEventListener("click", () => { location.hash = "#/"; });
     get("create-form").addEventListener("submit", (event) => submit("create", event));
     get("join-form").addEventListener("submit", (event) => submit("join", event));
+    get("create-form").elements.blinds.addEventListener("change", () => {
+      syncCreateBringIn();
+      get("create-form").elements.bringIn.value = get("create-form").elements.buyIn.value;
+    });
+    get("create-form").elements.buyIn.addEventListener("change", () => {
+      get("create-form").elements.bringIn.value = get("create-form").elements.buyIn.value;
+    });
+    get("create-form").elements.practice.addEventListener("change", () => syncCreateBringIn());
     for (const kind of ["create", "join"]) {
-      get(`${kind}-form`).elements.name.addEventListener("input", (event) => {
-        event.target.setCustomValidity("");
-        rememberName(event.target.value);
-      });
       const dialog = get(`${kind}-dialog`);
       dialog.addEventListener("click", (event) => {
         if (event.target !== dialog) return;
@@ -232,8 +280,8 @@
     get("search").addEventListener("input", (event) => { query = event.target.value.trim(); renderRooms(); });
     get("rooms").addEventListener("click", (event) => {
       const join = event.target.closest("[data-room-code]");
-      if (join && !join.disabled) openDialog("join", join.dataset.roomCode);
-      if (event.target.closest("[data-empty-create]")) openDialog("create");
+      if (join && !join.disabled) ensureAuth(() => openDialog("join", join.dataset.roomCode));
+      if (event.target.closest("[data-empty-create]")) ensureAuth(() => openDialog("create"));
       if (event.target.closest("[data-clear-filter]")) {
         query = "";
         get("search").value = "";
@@ -266,11 +314,10 @@
         if (connected === Boolean(value)) return;
         connected = Boolean(value);
         root.classList.toggle("is-connected", connected);
-        get("connection").textContent = connected ? "已连接" : "正在重新连接";
         renderRooms();
       },
       setBusy(value) { pending = Boolean(value); syncControls(); },
-      showInvite(code) { openDialog("join", code); },
+      showInvite(code) { ensureAuth(() => openDialog("join", code)); },
       reset() {
         for (const kind of ["create", "join"]) {
           get(`${kind}-dialog`).close();

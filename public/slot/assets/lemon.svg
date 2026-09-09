@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="柠檬">
+  <path fill="#47d7ac" stroke="#171615" stroke-linejoin="round" stroke-width="6" d="M91 36c12-16 30-17 43-10-10 18-25 23-43 10z"/>
+  <path fill="#ffd84d" stroke="#171615" stroke-linejoin="round" stroke-width="7" d="M31 91c0-32 24-56 57-56 4 0 8 0 12 2 2 4 4 8 8 11 3 4 8 7 13 9 1 4 2 8 2 12 0 31-25 56-57 56-10 0-20-3-28-8-4-9-7-17-7-26z"/>
+  <path fill="none" stroke="#fff4ab" stroke-linecap="round" stroke-width="8" d="M51 73c9-14 23-21 39-20"/>
+</svg>

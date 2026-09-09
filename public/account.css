@@ -1,0 +1,458 @@
+/* 账号 / 个人中心 */
+
+.account-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  background: #1b2122;
+  border: 1px solid #333d39;
+  border-radius: 6px;
+  margin-bottom: 22px;
+}
+.account-tabs button {
+  flex: 1;
+  border: 0;
+  border-radius: 4px;
+  height: 36px;
+  background: transparent;
+  color: #97a79e;
+  font-size: 13px;
+}
+.account-tabs button[aria-pressed="true"] {
+  background: #3a4540;
+  color: #e0eae3;
+}
+.account-hint {
+  margin: 14px 0 0;
+  font-size: 11px;
+  line-height: 1.7;
+  color: #8fa098;
+  text-align: center;
+}
+.account-avatar { display: inline-flex; }
+.account-avatar img { width: 45px; height: 45px; }
+
+.pos { color: var(--green); }
+.neg { color: var(--red); }
+
+.home-practice-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid #6d6247;
+  background: #37311f;
+  color: #d9c690;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.home-bring-in-hint {
+  margin: -12px 0 18px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #8fa098;
+}
+.home-practice-check {
+  display: flex !important;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 9px;
+  cursor: pointer;
+}
+.home-practice-check input { width: 16px; height: 16px; accent-color: var(--green); }
+.home-practice-check span { font-size: 13px; color: #d7e2da; }
+.home-practice-note {
+  margin: 0 0 18px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #c5b993;
+}
+
+/* 牌桌钱包余额 */
+
+.room-wallet {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 14px 0 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #ffffff05;
+}
+.room-wallet-item { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.room-wallet-item span { font-size: 10px; color: var(--muted); }
+.room-wallet-item strong { font-size: 15px; color: #e0eae3; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+/* 个人中心抽屉 */
+
+.profile-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(430px, 100vw);
+  background: #1a231f;
+  border-left: 1px solid #485c49;
+  z-index: 30;
+  padding: 25px 22px;
+  box-shadow: -15px 0 50px #0005;
+  overflow-y: auto;
+}
+.profile-account {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 4px 2px 18px;
+}
+.profile-account-info { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.profile-account-info strong { font-size: 17px; overflow-wrap: anywhere; }
+.profile-account-info span { font-size: 11px; color: #93a598; font-variant-numeric: tabular-nums; }
+.profile-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  background: #141b18;
+  border: 1px solid #2c3833;
+  border-radius: 6px;
+  margin-bottom: 18px;
+}
+.profile-tabs button {
+  flex: 1;
+  border: 0;
+  border-radius: 4px;
+  height: 34px;
+  background: transparent;
+  color: #8fa398;
+  font-size: 12px;
+}
+.profile-tabs button[aria-pressed="true"] { background: #33413a; color: #e0eae3; }
+.profile-body { min-height: 0; }
+.profile-empty { margin: 30px 0; text-align: center; font-size: 12px; color: var(--muted); line-height: 1.8; }
+
+.profile-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.profile-stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 11px 13px;
+  border: 1px solid #2c3833;
+  border-radius: var(--radius);
+  background: #ffffff04;
+}
+.profile-stats > div:first-child { grid-column: 1 / -1; }
+.profile-stats span { font-size: 10px; color: var(--muted); }
+.profile-stats strong { font-size: 17px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.profile-subsidy { margin-bottom: 16px; }
+.profile-subhead { font-size: 13px; font-weight: 600; color: #c3d2c6; margin: 6px 0 10px; }
+
+.profile-board {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid #2c3833;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.profile-board li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 13px;
+  font-size: 12px;
+  border-bottom: 1px solid #24302a;
+  background: #ffffff03;
+}
+.profile-board li:last-child { border-bottom: 0; }
+.profile-board li.is-self { background: #72c99d12; }
+.profile-board li.is-self .profile-board-name { color: var(--green); }
+.profile-board-rank {
+  width: 22px;
+  flex-shrink: 0;
+  color: #7d8f83;
+  font-variant-numeric: tabular-nums;
+}
+.profile-board li.rank-1 .profile-board-rank,
+.profile-board li.rank-2 .profile-board-rank,
+.profile-board li.rank-3 .profile-board-rank { color: var(--gold); font-weight: 700; }
+.profile-board-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile-board-name b { font-weight: 500; color: inherit; }
+.profile-board strong { font-variant-numeric: tabular-nums; }
+
+.profile-list { margin: 0; padding: 0; list-style: none; }
+.profile-list > li {
+  padding: 13px 2px;
+  border-bottom: 1px solid #26342c;
+}
+.profile-hand-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.profile-hand-top time { font-size: 11px; color: #93a598; font-variant-numeric: tabular-nums; }
+.profile-hand-room { flex: 1; min-width: 0; font-size: 11px; color: #93a598; overflow-wrap: anywhere; }
+.profile-net { font-size: 14px; font-variant-numeric: tabular-nums; }
+.profile-hand-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 9px;
+}
+.profile-hand-cards > div { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.profile-hand-label { font-size: 10px; color: var(--muted); flex-shrink: 0; }
+.profile-hand-none { font-size: 11px; color: #7d8f83; }
+.profile-hand-meta { margin: 9px 0 0; font-size: 11px; line-height: 1.6; color: #9fb0a5; overflow-wrap: anywhere; }
+
+.profile-ledger { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.profile-ledger-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.profile-ledger-type {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid #3c4a42;
+  background: #2a352e;
+  color: #c3d2c6;
+  font-size: 10px;
+}
+.profile-ledger-type.is-transfer { border-color: #55492f; background: #332d1e; color: #d9c690; }
+.profile-ledger-main time { font-size: 11px; color: #8fa398; font-variant-numeric: tabular-nums; }
+.profile-ledger-side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+.profile-ledger-side strong { font-size: 14px; font-variant-numeric: tabular-nums; }
+.profile-ledger-after { font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* 老虎机页签 */
+.profile-slot-symbols { display: flex; align-items: center; gap: 8px; margin-top: 9px; }
+.profile-slot-symbols img {
+  width: 30px;
+  height: 30px;
+  padding: 3px;
+  border: 1px solid #2c3833;
+  border-radius: 6px;
+  background: #ffffff06;
+}
+
+.profile-more { margin-top: 14px; }
+
+@media (max-width: 680px) {
+  .profile-drawer { padding: 20px 16px; }
+  .profile-stats { gap: 8px; }
+  .profile-stats strong { font-size: 15px; }
+}
+
+/* 顶栏右侧身份簇（登录/注册、头像昵称余额、补助） */
+
+.topbar-identity { display: flex; align-items: center; gap: 10px; }
+.topbar-auth { min-height: 32px; padding: 5px 12px; font-size: 12px; gap: 6px; }
+.topbar-auth svg { width: 14px; height: 14px; }
+.topbar-account {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 3px 5px;
+  border-radius: 7px;
+  text-align: left;
+}
+.topbar-account:hover { background: #ffffff08; }
+.topbar-account .account-avatar img { width: 30px; height: 30px; }
+.topbar-account-text { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0; }
+.topbar-account-text strong {
+  font-size: 13px;
+  color: #e6efe8;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.topbar-rank { color: var(--gold); font-size: 10px; font-weight: 500; margin-left: 4px; }
+.topbar-balance {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #9fb0a5;
+  font-variant-numeric: tabular-nums;
+}
+.topbar-balance svg { width: 12px; height: 12px; color: var(--gold); }
+.topbar-subsidy { position: relative; }
+.topbar-dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--red);
+}
+.profile-logout { margin-left: auto; }
+
+.portal-guest-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: #c5b993;
+}
+.portal-guest-hint svg { width: 14px; height: 14px; color: var(--gold); }
+.portal-guest-hint[hidden] { display: none; }
+
+@media (max-width: 680px) {
+  .topbar-account-text { flex-direction: row; align-items: center; gap: 6px; }
+  .topbar-account-text strong { display: none; }
+  .topbar-auth { min-height: 30px; padding: 4px 10px; font-size: 11px; }
+}
+@media (max-width: 420px) {
+  .topbar-auth span { display: none; }
+  .topbar-auth { padding: 4px 8px; }
+}
+
+/* 门户首页 */
+
+.portal-view {
+  max-width: 1300px;
+  margin: 0 auto;
+  padding: 24px 36px 40px;
+  min-height: calc(100vh - 86px);
+}
+.portal-hero { margin-bottom: 26px; }
+.portal-hero h1 { font-size: 28px; font-weight: 650; line-height: 1.45; margin: 6px 0 8px; }
+.portal-hero p { margin: 0; font-size: 13px; color: #93a598; }
+.portal-games {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 30px;
+}
+.portal-game {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  min-width: 0;
+  min-height: 168px;
+  padding: 18px;
+  border: 1px solid #3c4641;
+  border-radius: 7px;
+  background: #23292a;
+  color: inherit;
+  text-align: left;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+button.portal-game:hover { border-color: #728679; background: #252d2c; }
+.portal-game.is-disabled { opacity: 0.55; cursor: not-allowed; }
+.portal-game-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: #314d3e;
+  color: #a9d8ba;
+  flex-shrink: 0;
+}
+.portal-game.is-disabled .portal-game-icon { background: #343034; color: #8d8577; }
+.portal-game-icon svg { width: 24px; height: 24px; }
+.portal-game-info { min-width: 0; flex: 1; }
+.portal-game-info h2 { font-size: 16px; font-weight: 600; margin: 0 0 7px; }
+.portal-game-info p { margin: 0; font-size: 11px; line-height: 1.7; color: #97a79e; }
+.portal-game-badge {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid #55492f;
+  background: #37311f;
+  color: #d9c690;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.portal-game-online {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 9px;
+  font-size: 11px;
+  color: #8fc7a6;
+}
+.portal-game-online svg { width: 13px; height: 13px; }
+.portal-game-go {
+  position: absolute;
+  bottom: 16px;
+  right: 14px;
+  color: #728679;
+  display: inline-flex;
+}
+.portal-game-go svg { width: 18px; height: 18px; }
+
+.portal-tables { margin-top: 6px; }
+.portal-tables .section-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #b4c1b8;
+  margin-bottom: 12px;
+}
+.portal-table-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.portal-table {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 13px 15px;
+  border: 1px solid #3c4641;
+  border-radius: 7px;
+  background: #23292a;
+  color: inherit;
+  text-align: left;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+.portal-table:hover { border-color: #728679; background: #252d2c; }
+.portal-table > svg { width: 16px; height: 16px; color: #728679; flex-shrink: 0; }
+.portal-table-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.portal-table-main strong { font-size: 14px; font-variant-numeric: tabular-nums; }
+.portal-table-meta { font-size: 11px; color: #97a79e; overflow-wrap: anywhere; }
+.portal-table-practice { color: #d9c690; font-weight: 500; }
+.portal-table-state {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid #3c4a42;
+  background: #2a352e;
+  color: #b4c8b9;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.portal-table-state.is-playing { border-color: #6d6247; background: #37311f; color: #d9c690; }
+.portal-table-stack {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: #c9d6cc;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.portal-table-stack svg { width: 13px; height: 13px; color: var(--gold); }
+
+@media (max-width: 1120px) {
+  .portal-games { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 680px) {
+  .portal-view { padding: 26px 20px 35px; }
+  .portal-hero h1 { font-size: 26px; }
+  .portal-games { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .portal-game { min-height: 0; }
+  .portal-table-list { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 370px) {
+  .portal-view { padding: 23px 15px 30px; }
+}

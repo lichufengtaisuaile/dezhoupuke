@@ -1,0 +1,49 @@
+.hand-celebration {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+  contain: layout paint;
+}
+.celebration-banner {
+  position: absolute;
+  top: 1px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 136px;
+  max-width: calc(50% - 54px);
+  height: 24px;
+  padding: 0 6px;
+  border-bottom: 1px solid var(--celebration-accent);
+  color: var(--celebration-accent);
+  background: #142022e8;
+  font-size: 13px;
+  line-height: 20px;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+.celebration-particle {
+  position: absolute;
+  display: block;
+  width: 4px;
+  height: 9px;
+  border-radius: 1px;
+  will-change: transform, opacity;
+}
+.celebration-star {
+  width: 10px;
+  height: 10px;
+  border-radius: 0;
+  clip-path: polygon(50% 0,61% 35%,100% 50%,61% 65%,50% 100%,39% 65%,0 50%,39% 35%);
+}
+@media (max-width: 680px), (max-height: 560px) {
+  .celebration-banner { width: 104px; font-size: 12px; }
+  .celebration-particle { width: 3px; height: 7px; }
+  .celebration-star { width: 8px; height: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hand-celebration { display: none; }
+}

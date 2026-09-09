@@ -1,0 +1,163 @@
+/* 管理后台：暗色，复用 style.css/account.css 的变量与按钮语言。 */
+
+.admin-shell {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 26px 22px 60px;
+}
+
+.admin-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 22px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.admin-head h1 { margin: 0; font-size: 22px; font-weight: 650; }
+.admin-sub { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+
+.admin-gate {
+  max-width: 460px;
+  margin: 60px auto;
+  padding: 26px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #ffffff04;
+}
+.admin-gate-form label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+.admin-gate-row { display: flex; gap: 10px; }
+.admin-gate-row input {
+  flex: 1;
+  height: 40px;
+  padding: 0 12px;
+  background: #1c2420;
+  border: 1px solid #394541;
+  border-radius: 6px;
+  color: var(--text);
+}
+.admin-gate-error { margin: 12px 0 0; font-size: 12px; color: var(--red); }
+
+.admin-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.admin-toolbar input {
+  width: 260px;
+  max-width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  background: #1c2420;
+  border: 1px solid #394541;
+  border-radius: 6px;
+  color: var(--text);
+}
+.admin-count { font-size: 12px; color: var(--muted); }
+
+.admin-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.admin-table th,
+.admin-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid #26302b;
+}
+.admin-table th {
+  color: var(--muted);
+  font-weight: 500;
+  background: #ffffff05;
+}
+.admin-table tbody tr:last-child td { border-bottom: 0; }
+.admin-table td { font-variant-numeric: tabular-nums; }
+.admin-name { font-weight: 600; color: #e0eae3; }
+.admin-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid #3c4a42;
+  background: #2a352e;
+  color: #b4c8b9;
+  font-size: 10px;
+}
+.admin-badge.is-banned {
+  border-color: #6d3a3d;
+  background: #3a2426;
+  color: #efa2a5;
+}
+.admin-actions { display: flex; gap: 8px; }
+.admin-actions .button { min-height: 30px; padding: 4px 10px; font-size: 11px; }
+.admin-empty { padding: 26px; text-align: center; font-size: 12px; color: var(--muted); }
+
+.admin-audit { margin-top: 30px; }
+.admin-audit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.admin-audit-head h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.admin-audit-head .button { min-height: 30px; padding: 4px 12px; font-size: 11px; }
+.admin-audit-list { margin: 0; padding: 0; list-style: none; }
+.admin-audit-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 2px;
+  border-bottom: 1px solid #232e29;
+  font-size: 12px;
+}
+.admin-audit-list time { color: var(--muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.admin-audit-action {
+  flex-shrink: 0;
+  padding: 1px 8px;
+  border-radius: 4px;
+  border: 1px solid #3c4a42;
+  background: #2a352e;
+  color: #c3d2c6;
+  font-size: 10px;
+}
+.admin-audit-action.is-ban { border-color: #6d3a3d; background: #3a2426; color: #efa2a5; }
+.admin-audit-detail { color: #9fb0a5; overflow-wrap: anywhere; }
+
+.admin-dialog {
+  width: 400px;
+  max-width: calc(100vw - 40px);
+  border: 1px solid #56605a;
+  border-radius: 8px;
+  background: #252b2c;
+  color: #ecf1ed;
+  padding: 24px;
+}
+.admin-dialog::backdrop { background: #101616cc; }
+.admin-dialog-form h2 { margin: 0 0 18px; font-size: 17px; }
+.admin-dialog-form label { display: block; font-size: 12px; color: #b4c1b8; margin-bottom: 14px; }
+.admin-dialog-form input {
+  display: block;
+  width: 100%;
+  height: 40px;
+  margin-top: 7px;
+  padding: 0 12px;
+  background: #1c2420;
+  border: 1px solid #394541;
+  border-radius: 6px;
+  color: var(--text);
+}
+.admin-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+
+@media (max-width: 680px) {
+  .admin-shell { padding: 18px 14px 46px; }
+  .admin-gate { margin: 30px auto; padding: 20px 16px; }
+  .admin-gate-row { flex-direction: column; }
+}

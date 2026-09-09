@@ -8,7 +8,7 @@ import { describeHand } from '../hand-description.js';
 const WAIT_MS = 5000;
 
 async function fixture(t, options = {}) {
-  const server = await createPokerServer({ port: 0, host: '127.0.0.1', ...options });
+  const server = await createPokerServer({ port: 0, host: '127.0.0.1', requireAuth: false, dbPath: ':memory:', ...options });
   const clients = [];
   t.after(async () => {
     for (const client of clients) client.socket.disconnect();

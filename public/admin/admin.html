@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex" />
+    <meta name="description" content="同桌平台管理后台：用户、资金、封禁与审计" />
+    <title>管理后台 | 同桌</title>
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="../account.css" />
+    <link rel="stylesheet" href="admin.css" />
+  </head>
+  <body>
+    <div class="admin-shell">
+      <header class="admin-head">
+        <div>
+          <h1>管理后台</h1>
+          <p class="admin-sub">仅供管理员 · 所有操作都会写入审计日志</p>
+        </div>
+        <button type="button" class="button secondary admin-logout" id="logoutButton" hidden>清除令牌</button>
+      </header>
+
+      <!-- 令牌校验门：未配置/未登录时显示 -->
+      <section class="admin-gate" id="gate">
+        <form id="gateForm" class="admin-gate-form">
+          <label for="tokenInput">管理员令牌</label>
+          <div class="admin-gate-row">
+            <input id="tokenInput" type="password" placeholder="DEZHOU_ADMIN_TOKEN" autocomplete="off" required />
+            <button type="submit" class="button primary">验证并进入</button>
+          </div>
+          <p class="admin-gate-error" id="gateError" role="alert" hidden></p>
+        </form>
+      </section>
+
+      <!-- 主面板 -->
+      <main id="panel" hidden>
+        <div class="admin-toolbar">
+          <input id="searchInput" type="search" placeholder="按昵称搜索…" aria-label="按昵称搜索" />
+          <span class="admin-count" id="usersCount"></span>
+        </div>
+
+        <div class="admin-table-wrap">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>昵称</th>
+                <th>状态</th>
+                <th>可用余额</th>
+                <th>桌上</th>
+                <th>总资产</th>
+                <th>手数</th>
+                <th>老虎机</th>
+                <th>净盈亏</th>
+                <th>注册时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="usersBody"></tbody>
+          </table>
+          <p class="admin-empty" id="usersEmpty" hidden>没有匹配的用户</p>
+        </div>
+
+        <section class="admin-audit">
+          <div class="admin-audit-head">
+            <h2>审计日志</h2>
+            <button type="button" class="button secondary" id="auditMore" hidden>加载更多</button>
+          </div>
+          <ul class="admin-audit-list" id="auditList"></ul>
+          <p class="admin-empty" id="auditEmpty" hidden>还没有审计记录</p>
+        </section>
+      </main>
+    </div>
+
+    <!-- 调资金对话框 -->
+    <dialog class="admin-dialog" id="adjustDialog">
+      <form method="dialog" class="admin-dialog-form" id="adjustForm">
+        <h2>调整资金 · <span id="adjustTarget"></span></h2>
+        <label>
+          金额（正数增加 / 负数扣减，整数）
+          <input id="adjustAmount" type="number" step="1" required />
+        </label>
+        <label>
+          原因（必填，计入审计）
+          <input id="adjustReason" type="text" maxlength="100" required />
+        </label>
+        <p class="admin-gate-error" id="adjustError" role="alert" hidden></p>
+        <div class="admin-dialog-actions">
+          <button type="button" class="button secondary" id="adjustCancel">取消</button>
+          <button type="submit" class="button primary">确认调整</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" hidden></div>
+    <script src="admin.js"></script>
+  </body>
+</html>

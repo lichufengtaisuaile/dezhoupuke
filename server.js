@@ -1,12 +1,19 @@
 import express from 'express';
 import { createServer } from 'node:http';
 import { networkInterfaces } from 'node:os';
-import { randomBytes, randomInt, randomUUID } from 'node:crypto';
+import { randomBytes, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { Server } from 'socket.io';
 import { createTable } from './engine.js';
 import { describeHand } from './hand-description.js';
+import { GameError } from './src/errors.js';
+import { createDb, saveSnapshot, loadSnapshots, deleteSnapshot, clearSnapshots } from './src/db.js';
+import * as accounts from './src/account.js';
+import * as wallet from './src/wallet.js';
+import * as stats from './src/stats.js';
+import * as slot from './src/slot.js';
+import * as adminOps from './src/admin.js';
 import './public/social-catalog.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -17,7 +24,6 @@ const BOT_NAMES = ['小林', '阿岳', '小满', '阿森', '小夏'];
 const REACTIONS = new Map(globalThis.HOLDEM_REACTIONS.map(reaction => [reaction.id, reaction]));
 const REACTION_COOLDOWN_MS = 1200;
 
-class GameError extends Error {}
 function requireThat(condition, message) { if (!condition) throw new GameError(message); }
 function validName(value) {
   requireThat(typeof value === 'string', '请输入昵称');
@@ -37,13 +43,17 @@ export function networkUrls(port) {
     .map(entry => `http://${entry.address}:${port}`);
 }
 
-export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTimeoutMs = 30000, botDelayMs = 1100, disconnectGraceMs = 90000, nextHandDelayMs = 5000 } = {}) {
+export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTimeoutMs = 30000, botDelayMs = 1100, disconnectGraceMs = 90000, nextHandDelayMs = 5000, dbPath = path.join(ROOT, 'data', 'dezhou.db'), requireAuth = true, adminToken = process.env.DEZHOU_ADMIN_TOKEN ?? '' } = {}) {
   const app = express();
   const httpServer = createServer(app);
   const io = new Server(httpServer, { maxHttpBufferSize: 8192, serveClient: true });
+  const db = createDb(dbPath);
   const rooms = new Map();
   let actualPort = port;
   let closing = false;
+  let closed = false;
+  // 免费筹码房间（练习桌，或测试模式的旧行为）：入座不发钱包筹码，允许免费补满。
+  const freeChips = room => room.practice || !requireAuth;
   app.disable('x-powered-by');
   app.use((_req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -53,7 +63,154 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
   });
   app.get('/api/network', (_req, res) => res.json({ port: actualPort, urls: networkUrls(actualPort) }));
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
+  // 公开接口：未登录（socket 未连接）时前端用它浏览房间列表。
+  app.get('/api/lobby', (_req, res) => {
+    try { res.json({ ok: true, rooms: lobbyRooms() }); }
+    catch (error) { apiError(res, error); }
+  });
+  app.use(express.json());
+  function apiError(res, error) {
+    if (!(error instanceof GameError)) console.error('API error:', error);
+    res.status(error instanceof GameError ? 400 : 500).json({
+      ok: false,
+      error: error instanceof GameError ? error.message : '操作没有完成，请稍后重试',
+    });
+  }
+  function bearerAccount(req, res) {
+    const match = /^Bearer (.+)$/.exec(req.headers.authorization ?? '');
+    const account = match ? accounts.authenticate(db, match[1]) : null;
+    if (!account) {
+      res.status(401).json({ ok: false, error: '请先登录' });
+      return null;
+    }
+    // 在线期间被封禁的账号：REST 层面同样挡住（踢 socket 之外的保险）。
+    if (account.isBanned) {
+      res.status(401).json({ ok: false, error: '账号已被封禁' });
+      return null;
+    }
+    return account;
+  }
+  app.post('/api/register', (req, res) => {
+    try { res.json({ ok: true, ...accounts.register(db, req.body?.name, req.body?.password) }); }
+    catch (error) { apiError(res, error); }
+  });
+  app.post('/api/login', (req, res) => {
+    try { res.json({ ok: true, ...accounts.login(db, req.body?.name, req.body?.password) }); }
+    catch (error) {
+      // 封禁账号登录明确返回 403。
+      if (error instanceof GameError && error.message === '账号已被封禁') {
+        res.status(403).json({ ok: false, error: error.message });
+        return;
+      }
+      apiError(res, error);
+    }
+  });
+  app.get('/api/leaderboard', (_req, res) => {
+    try { res.json({ ok: true, entries: stats.leaderboard(db, rooms, 50) }); }
+    catch (error) { apiError(res, error); }
+  });
+  app.get('/api/me/overview', (req, res) => {
+    const account = bearerAccount(req, res);
+    if (!account) return;
+    try { res.json({ ok: true, ...stats.overview(db, rooms, account.id) }); }
+    catch (error) { apiError(res, error); }
+  });
+  app.get('/api/me/hands', (req, res) => {
+    const account = bearerAccount(req, res);
+    if (!account) return;
+    try {
+      const page = Number(req.query.page ?? 1);
+      res.json({ ok: true, ...stats.handsPage(db, account.id, Number.isSafeInteger(page) && page >= 1 ? page : 1) });
+    } catch (error) { apiError(res, error); }
+  });
+  app.get('/api/me/ledger', (req, res) => {
+    const account = bearerAccount(req, res);
+    if (!account) return;
+    try {
+      const page = Number(req.query.page ?? 1);
+      res.json({ ok: true, ...stats.ledgerPage(db, account.id, Number.isSafeInteger(page) && page >= 1 ? page : 1) });
+    } catch (error) { apiError(res, error); }
+  });
+  // 我的进行中牌桌：从内存 rooms 按账号过滤，不走数据库。
+  app.get('/api/me/tables', (req, res) => {
+    const account = bearerAccount(req, res);
+    if (!account) return;
+    try { res.json({ ok: true, tables: myTables(account.id) }); }
+    catch (error) { apiError(res, error); }
+  });
+  // 老虎机开奖：Bearer token，body { bet, spinId }。服务端 crypto 随机开奖，
+  // spinId 幂等（重复提交回放首次结果）；bet/payout/净盈亏/最新余额随响应返回。
+  app.post('/api/slot/spin', (req, res) => {
+    const account = bearerAccount(req, res);
+    if (!account) return;
+    try {
+      res.json({ ok: true, ...slot.spin(db, account.id, req.body?.bet, req.body?.spinId) });
+    } catch (error) { apiError(res, error); }
+  });
+  // 管理员请求：与用户 Bearer 分开，使用环境变量/启动参数配置的静态令牌。
+  // 未配置时后台接口一律 503（普通功能不受影响）。
+  function bearerAdmin(req, res) {
+    if (!adminToken) {
+      res.status(503).json({ ok: false, error: '管理后台未配置：请设置 DEZHOU_ADMIN_TOKEN 环境变量' });
+      return null;
+    }
+    const match = /^Bearer (.+)$/.exec(req.headers.authorization ?? '');
+    const token = match?.[1] ?? '';
+    const valid = token.length === adminToken.length
+      && timingSafeEqual(Buffer.from(token), Buffer.from(adminToken));
+    if (!valid) {
+      res.status(401).json({ ok: false, error: '管理员令牌不正确' });
+      return null;
+    }
+    return { admin: 'token' };
+  }
+  app.get('/api/admin/users', (req, res) => {
+    if (!bearerAdmin(req, res)) return;
+    try {
+      const page = Number(req.query.page ?? 1);
+      res.json({ ok: true, ...adminOps.usersPage(db, rooms, { q: req.query.q ?? '', page }) });
+    } catch (error) { apiError(res, error); }
+  });
+  app.post('/api/admin/users/:id/adjust', (req, res) => {
+    if (!bearerAdmin(req, res)) return;
+    try {
+      res.json({ ok: true, ...adminOps.adjustBalance(db, req.params.id, req.body?.amount, req.body?.reason) });
+    } catch (error) { apiError(res, error); }
+  });
+  app.post('/api/admin/users/:id/ban', (req, res) => {
+    if (!bearerAdmin(req, res)) return;
+    try {
+      const result = adminOps.setBanned(db, req.params.id, req.body?.banned);
+      if (result.banned) kickAccount(result.accountId);
+      res.json({ ok: true, ...result });
+    } catch (error) { apiError(res, error); }
+  });
+  app.get('/api/admin/audit', (req, res) => {
+    if (!bearerAdmin(req, res)) return;
+    try {
+      const page = Number(req.query.page ?? 1);
+      res.json({ ok: true, ...adminOps.auditPage(db, page) });
+    } catch (error) { apiError(res, error); }
+  });
+  // 老虎机记录：?page=N 分页（个人中心页签）或 ?limit=N 取最近 N 条（slot 页"最近开奖"）。
+  app.get('/api/me/spins', (req, res) => {
+    const account = bearerAccount(req, res);
+    if (!account) return;
+    try {
+      const limit = Number(req.query.limit ?? 0);
+      if (Number.isSafeInteger(limit) && limit >= 1) {
+        res.json({ ok: true, ...stats.recentSpins(db, account.id, limit) });
+      } else {
+        const page = Number(req.query.page ?? 1);
+        res.json({ ok: true, ...stats.spinsPage(db, account.id, Number.isSafeInteger(page) && page >= 1 ? page : 1) });
+      }
+    } catch (error) { apiError(res, error); }
+  });
   app.get('/vendor/lucide.js', (_req, res) => res.sendFile(path.join(ROOT, 'node_modules/lucide/dist/umd/lucide.js')));
+  // 老虎机独立游戏页：/slot/ 与 /slot 都落到 slot.html（静态目录的默认索引是 index.html）。
+  app.get(['/slot', '/slot/'], (_req, res) => res.sendFile(path.join(ROOT, 'public', 'slot', 'slot.html')));
+  // 管理员后台页（不进门户游戏卡片）。
+  app.get(['/admin', '/admin/'], (_req, res) => res.sendFile(path.join(ROOT, 'public', 'admin', 'admin.html')));
   app.use(express.static(path.join(ROOT, 'public'), { etag: true, maxAge: 0 }));
 
   function log(room, text) {
@@ -71,7 +228,7 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
     room.nextHandAt = null;
   }
   function activePlayers(room) {
-    return room.players.filter(p => !p.departing && p.connected && (p.stack > 0 || p.isBot));
+    return room.players.filter(p => !p.departing && p.connected && (p.stack > 0 || (p.isBot && freeChips(room))));
   }
   function canAutoStart(room) {
     return !closing && rooms.get(room.code) === room && room.autoNext
@@ -114,7 +271,7 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
     const showableWinner = foldWinner(room, viewer);
     return {
       code: room.code, phase: room.phase, handNumber: room.handNumber,
-      autoNext: room.autoNext, nextHandAt: room.nextHandAt,
+      autoNext: room.autoNext, nextHandAt: room.nextHandAt, practice: room.practice,
       smallBlind: room.smallBlind, bigBlind: room.bigBlind, buyIn: room.buyIn,
       maxPlayers: 6, hostId: room.hostId, selfId: viewer.id,
       players: room.players.map(p => ({
@@ -152,7 +309,25 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
         onlineCount: room.players.filter(player => player.connected && !player.departing).length,
         maxPlayers: 6, phase: room.phase,
         smallBlind: room.smallBlind, bigBlind: room.bigBlind, buyIn: room.buyIn,
+        // 仅在练习桌时带 practice 标记，保持普通房间的摘要字段不变。
+        ...(room.practice ? { practice: true } : {}),
       }));
+  }
+  function myTables(accountId) {
+    const tables = [];
+    for (const room of rooms.values()) {
+      const player = room.players.find(p => p.accountId === accountId && !p.departing);
+      if (!player) continue;
+      tables.push({
+        code: room.code,
+        smallBlind: room.smallBlind,
+        bigBlind: room.bigBlind,
+        myStack: player.stack,
+        practice: Boolean(room.practice),
+        playing: room.phase === 'playing',
+      });
+    }
+    return tables;
   }
   function broadcastLobby() {
     if (closing) return;
@@ -166,6 +341,7 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
   }
   function broadcast(room) {
     scheduleNextHand(room);
+    saveSnapshot(db, room);
     for (const p of room.players) {
       if (p.socketId && p.connected) io.sockets.sockets.get(p.socketId)?.emit('room:state', snapshot(room, p));
     }
@@ -192,17 +368,56 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       log(room, `${next.name} 成为房主`);
     }
   }
+  // 离桌退款：真人玩家离开座位时把桌上剩余筹码退回钱包（CASH_OUT 流水）。
+  // 练习桌与陪练（无账号）不产生资金变动。
+  function refundPlayer(room, player) {
+    if (requireAuth && player.accountId && !room.practice && player.stack > 0) {
+      wallet.cashOut(db, player.accountId, player.stack, room.code);
+    }
+    player.stack = 0;
+  }
   function removePlayer(room, player) {
     clearTimeout(player.disconnectTimer);
+    refundPlayer(room, player);
     room.players = room.players.filter(p => p !== player);
     transferHost(room);
     if (!room.players.some(p => !p.isBot && !p.departing)) {
       clearTurn(room);
       clearNextHand(room);
-      for (const p of room.players) clearTimeout(p.disconnectTimer);
+      for (const p of room.players) { clearTimeout(p.disconnectTimer); refundPlayer(room, p); }
       rooms.delete(room.code);
+      deleteSnapshot(db, room.code);
       broadcastLobby();
     }
+  }
+  // 手牌结算落库：写 hands/hand_players 并记录 HAND_WIN 备忘流水。
+  // 幂等由 wallet.settleHand 内的 (room_code, hand_number) 唯一键保证。
+  // 手牌净盈亏 = 结算后 stack − 发牌时 stack（startStacks），整手之和恒为 0。
+  // before（finishHand 入口的 stack）已扣除本手全部下注，不能用作净盈亏基准。
+  function settleHandToDb(room, before) {
+    const beforeStacks = new Map(before.map(p => [p.id, p.stack]));
+    const winnersById = new Map(room.result.map(w => [w.id, w]));
+    const players = room.players.filter(p => p.inHand).map(p => {
+      const win = winnersById.get(p.id);
+      const baseline = room.startStacks.get(p.id) ?? beforeStacks.get(p.id) ?? p.stack;
+      return {
+        accountId: p.accountId ?? null,
+        playerId: p.id,
+        name: p.name,
+        seat: p.seat,
+        holeCards: room.revealed.has(p.seat) ? room.holeCards[p.seat] : null,
+        net: p.stack - baseline,
+        isWinner: Boolean(win),
+        handName: win?.handName ?? null,
+        handDetail: win ? JSON.stringify(win.hand) : null,
+        revealed: room.revealed.has(p.seat),
+      };
+    });
+    wallet.settleHand(db, {
+      handId: randomUUID(), roomCode: room.code, handNumber: room.handNumber,
+      smallBlind: room.smallBlind, bigBlind: room.bigBlind,
+      board: room.board, pot: room.pot, players,
+    });
   }
   function finishHand(room) {
     room.board = room.table.communityCards();
@@ -228,6 +443,7 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       }];
     });
     room.phase = 'finished';
+    if (requireAuth && !room.practice) settleHandToDb(room, before);
     clearTurn(room);
     for (const winner of room.result) log(room, `${winner.name} 获得 ${winner.amount} 筹码 · ${winner.handName}`);
     for (const p of [...room.players]) if (p.departing) removePlayer(room, p);
@@ -338,15 +554,28 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
     settleRounds(room);
     scheduleTurn(room);
   }
-  function newPlayer(room, name, bot = false) {
+  // account 为 null 表示免登录模式（旧行为/测试）：入座发免费筹码。
+  // 真人桌账号玩家从钱包扣带入金额（BRING_IN 流水）；练习桌用免费练习筹码。
+  function newPlayer(room, name, { bot = false, account = null, bringIn = null } = {}) {
     requireThat(room.players.length < 6, '房间已满，最多 6 人');
     requireThat(!room.players.some(p => p.name === name), '这个昵称已被使用');
     const seat = Array.from({ length: 6 }, (_, n) => n).find(n => !room.players.some(p => p.seat === n));
+    let stack;
+    if (account && !room.practice) {
+      const amount = bringIn ?? room.buyIn;
+      integer(amount, room.bigBlind * 20, 100000, '带入金额');
+      wallet.bringIn(db, account.id, amount, room.code);
+      stack = amount;
+    } else if (bot) {
+      stack = room.buyIn;
+    } else {
+      stack = bringIn ?? room.buyIn;
+    }
     const player = {
       id: randomUUID(), token: randomBytes(32).toString('hex'), name, seat,
-      stack: room.buyIn, bet: 0, connected: bot, isBot: bot, socketId: null,
+      stack, bet: 0, connected: bot, isBot: bot, socketId: null,
       folded: false, inHand: false, lastAction: '', departing: false, disconnectTimer: null,
-      lastReactionAt: null,
+      lastReactionAt: null, accountId: account?.id ?? null,
     };
     room.players.push(player);
     log(room, `${name} 入座${isPlaying(room) ? '，等待下一手' : ''}`);
@@ -388,6 +617,60 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
     }
     if (rooms.has(room.code)) broadcast(room);
   }
+  // 封禁踢人：先断该账号全部 socket，再逐房间清理座位。
+  // - 等待中/未在局：立即 removePlayer（退桌上筹码写 CASH_OUT、房主移交、空房销毁）。
+  // - 对局中：引擎（poker-ts）不支持中途抽走座位，走与"中途离开"一致的降级：
+  //   标记 departing 并立即退回当前桌上 stack（置 stack=0/inHand=false，防止 syncTable
+  //   把引擎 stack 写回造成重复退款）；正好轮到其行动时先借引擎 fold 推进对局，
+  //   再从房间剩余座位里退款；其余情况由既有超时路径在其轮到时自动弃牌，
+  //   finishHand 的 departing 清理统一移除座位。定时器都有归属或被清除，不会悬空。
+  // 已知窄边界：已被全下（all-in）的玩家被封禁时，引擎摊牌仍认其座位资格，
+  // 该座位应得份额不再分配（管理操作场景，不影响资金安全）。
+  function kickAccount(accountId) {
+    for (const socket of io.sockets.sockets.values()) {
+      if (socket.data.account?.id === accountId) {
+        socket.data.membership = null;
+        socket.disconnect(true);
+      }
+    }
+    for (const room of [...rooms.values()]) {
+      const player = room.players.find(p => p.accountId === accountId && !p.isBot);
+      if (!player) continue;
+      clearTimeout(player.disconnectTimer);
+      player.socketId = null;
+      player.connected = false;
+      transferHost(room);
+      log(room, `${player.name} 已被管理员移出房间`);
+      const seatedInHand = isPlaying(room) && player.inHand;
+      player.departing = true;
+      if (seatedInHand && room.table.isBettingRoundInProgress() && room.table.playerToAct() === player.seat) {
+        // 正好轮到他行动：先经引擎 fold 立即推进（若因此打完本手，finishHand 会
+        // 按 departing 移除并退回首叠同步回来的 stack，这里不再重复退款）。
+        takeAction(room, player, { action: 'fold' }, true);
+      }
+      const stillSeated = rooms.has(room.code) && room.players.includes(player);
+      if (!seatedInHand) {
+        removePlayer(room, player);
+      } else if (stillSeated) {
+        refundPlayer(room, player);
+        player.stack = 0;
+        player.inHand = false;
+        player.folded = true;
+      }
+      if (rooms.has(room.code)) broadcast(room);
+    }
+  }
+
+  io.use((socket, next) => {
+    socket.data.account = null;
+    if (!requireAuth) return next();
+    const token = socket.handshake.auth && typeof socket.handshake.auth.token === 'string' ? socket.handshake.auth.token : null;
+    const account = token ? accounts.authenticate(db, token) : null;
+    if (!account) return next(new Error('请先登录后再进入房间'));
+    if (account.isBanned) return next(new Error('账号已被封禁'));
+    socket.data.account = account;
+    next();
+  });
 
   io.on('connection', socket => {
     let requests = [];
@@ -434,7 +717,8 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
     on('room:create', input => {
       requireThat(!socket.data.membership, '请先离开当前房间');
       requireThat(rooms.size < 100, '房间较多，请稍后再试');
-      const name = validName(input.name);
+      requireThat(!requireAuth || socket.data.account, '请先登录后再创建房间');
+      const name = socket.data.account?.name ?? validName(input.name);
       const smallBlind = integer(input.smallBlind ?? 10, 1, 500, '小盲注');
       const bigBlind = integer(input.bigBlind ?? smallBlind * 2, smallBlind * 2, smallBlind * 2, '大盲注');
       const buyIn = integer(input.buyIn ?? 2000, bigBlind * 20, 100000, '初始筹码');
@@ -443,12 +727,13 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       do { code = Array.from({ length: 6 }, () => alphabet[randomInt(alphabet.length)]).join(''); } while (rooms.has(code));
       const room = {
         code, smallBlind, bigBlind, buyIn, phase: 'lobby', players: [], hostId: null,
+        practice: input.practice === true,
         handNumber: 0, turnId: 0, turnDeadline: null, timer: null, table: null,
         autoNext: true, nextHandAt: null, nextHandTimer: null,
         board: [], holeCards: [], pot: 0, pots: [], round: null, dealerSeat: null,
         result: [], revealed: new Set(), log: [], logSequence: 0, startStacks: new Map(),
       };
-      const player = newPlayer(room, name);
+      const player = newPlayer(room, name, { account: socket.data.account, bringIn: input.bringIn ?? null });
       room.hostId = player.id;
       rooms.set(code, room);
       const response = associate(socket, room, player);
@@ -457,18 +742,27 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
     });
     on('room:join', input => {
       requireThat(!socket.data.membership, '请先离开当前房间');
+      requireThat(!requireAuth || socket.data.account, '请先登录后再加入房间');
       const code = typeof input.code === 'string' ? input.code.trim().toUpperCase() : '';
       const room = rooms.get(code);
       requireThat(room, '没有找到房间，请检查房间号');
-      const player = newPlayer(room, validName(input.name));
+      const player = newPlayer(room, socket.data.account?.name ?? validName(input.name), {
+        account: socket.data.account, bringIn: input.bringIn ?? null,
+      });
       const response = associate(socket, room, player);
       broadcast(room);
       return response;
     });
     on('room:resume', input => {
       requireThat(!socket.data.membership, '当前页面已经在房间中');
-      const room = rooms.get(input.code);
-      const player = room?.players.find(p => p.token === input.token && !p.isBot && !p.departing);
+      const room = rooms.get(typeof input.code === 'string' ? input.code.trim().toUpperCase() : '');
+      // 账号模式按账号找回座位（断线宽限期内），免登录模式沿用座位 token。
+      let player = null;
+      if (socket.data.account) {
+        player = room?.players.find(p => p.accountId === socket.data.account.id && !p.isBot && !p.departing) ?? null;
+      } else if (typeof input.token === 'string') {
+        player = room?.players.find(p => p.token === input.token && !p.isBot && !p.departing) ?? null;
+      }
       requireThat(player, '座位已失效，请重新加入房间');
       const response = associate(socket, room, player);
       log(room, `${player.name} 已连接`);
@@ -480,7 +774,7 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       requireThat(!isPlaying(room), '本手结束后可以添加陪练');
       const name = BOT_NAMES.find(n => !room.players.some(p => p.name === `${n}·陪练`));
       requireThat(name, '陪练已全部入座');
-      newPlayer(room, `${name}·陪练`, true);
+      newPlayer(room, `${name}·陪练`, { bot: true });
       broadcast(room);
     });
     on('room:remove-bot', input => {
@@ -511,17 +805,52 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       if (winner.revealed) return;
       winner.revealed = true;
       room.revealed.add(player.seat);
+      if (requireAuth && !room.practice) {
+        wallet.markRevealed(db, room.code, room.handNumber, player.seat, room.holeCards[player.seat], JSON.stringify(winner.hand));
+      }
       log(room, `${player.name} 展示手牌 · ${winner.hand.detail}`);
       clearNextHand(room);
       broadcast(room);
     });
     on('room:rebuy', () => {
       const { room, player } = member(socket);
+      requireThat(freeChips(room), '真实筹码牌桌不能免费补充，筹码不足可领取每日补助');
       requireThat(!isPlaying(room), '本手结束后可以补充筹码');
       requireThat(player.stack === 0, '筹码用完后可以重新补充');
       player.stack = room.buyIn;
       log(room, `${player.name} 补充 ${room.buyIn} 筹码`);
       broadcast(room);
+    });
+    // 每日补助：每账号每天一次，总资产（余额 + 桌上筹码）低于 2,000 时可领 2,000。
+    on('room:subsidy', () => {
+      const account = socket.data.account;
+      requireThat(account, '请先登录后再领取补助');
+      const membership = socket.data.membership;
+      const room = membership ? rooms.get(membership.code) : null;
+      const player = room?.players.find(p => p.accountId === account.id && !p.departing) ?? null;
+      requireThat(!room?.practice, '练习桌使用免费练习筹码，无需补助');
+      let tableStack = 0;
+      for (const other of rooms.values()) {
+        for (const seated of other.players) if (seated.accountId === account.id) tableStack += seated.stack;
+      }
+      const balance = wallet.balanceOf(db, account.id);
+      requireThat(balance + tableStack < wallet.SUBSIDY_THRESHOLD, '总资产不低于 2,000 时不能领取补助');
+      wallet.grantSubsidy(db, account.id);
+      if (room) log(room, `${account.name} 领取每日补助 ${wallet.SUBSIDY_AMOUNT} 筹码`);
+      //  seated 且筹码已清空：自动把补助带入桌上，避免领了补助却没法继续。
+      if (room && player) {
+        if (player.stack === 0 && !isPlaying(room)) {
+          const amount = Math.min(wallet.SUBSIDY_AMOUNT, 100000);
+          if (amount >= room.bigBlind * 20) {
+            wallet.bringIn(db, account.id, amount, room.code);
+            player.stack = amount;
+            log(room, `${player.name} 带入 ${amount} 筹码`);
+          }
+        }
+        broadcast(room);
+      } else {
+        broadcastLobby();
+      }
     });
     on('room:leave', () => { const { room, player } = member(socket); leave(socket, room, player); });
     socket.on('disconnect', () => {
@@ -542,14 +871,63 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
     broadcastLobby();
   });
 
+  // 重启恢复：从 room_snapshots 重建房间与座位。
+  // 降级方案——完整重建 poker-ts 对局内部状态过于脆弱，因此对"进行中的手牌"选择作废：
+  // 把已下注筹码并回座位 stack（资产一分不丢，也无需动钱包账本），牌局回到等待阶段，
+  // 在场玩家凭账号 token 重连后可继续。lobby/finished 房间直接恢复座位与桌上筹码。
+  function restoreRooms() {
+    for (const payload of loadSnapshots(db)) {
+      try {
+        const room = {
+          code: payload.code, smallBlind: payload.smallBlind, bigBlind: payload.bigBlind, buyIn: payload.buyIn,
+          practice: Boolean(payload.practice), phase: payload.phase, players: [], hostId: payload.hostId ?? null,
+          handNumber: payload.handNumber ?? 0, turnId: 0, turnDeadline: null, timer: null, table: null,
+          autoNext: payload.autoNext !== false, nextHandAt: null, nextHandTimer: null,
+          board: [], holeCards: [], pot: 0, pots: [], round: null,
+          dealerSeat: payload.dealerSeat ?? null, result: [], revealed: new Set(payload.revealed ?? []),
+          log: Array.isArray(payload.log) ? payload.log : [], logSequence: payload.logSequence ?? 0,
+          startStacks: new Map(),
+        };
+        room.players = (payload.players ?? []).map(p => ({
+          id: p.id, token: randomBytes(32).toString('hex'), name: p.name, seat: p.seat,
+          stack: p.stack, bet: p.bet, connected: Boolean(p.isBot), isBot: Boolean(p.isBot), socketId: null,
+          folded: false, inHand: false, lastAction: '', departing: false, disconnectTimer: null,
+          lastReactionAt: null, accountId: p.accountId ?? null,
+        }));
+        if (room.phase === 'playing') {
+          for (const p of room.players) { p.stack += p.bet; p.bet = 0; }
+          room.phase = 'lobby';
+          log(room, '服务重启，进行中的这一手已作废，筹码已保留在座位上');
+        } else if (room.phase === 'finished') {
+          room.phase = 'lobby';
+        }
+        rooms.set(room.code, room);
+        for (const p of room.players) {
+          if (p.isBot || p.connected) continue;
+          p.disconnectTimer = setTimeout(() => {
+            if (p.connected || !rooms.has(room.code)) return;
+            leave({ data: {} }, room, p);
+          }, disconnectGraceMs);
+          p.disconnectTimer.unref();
+        }
+      } catch (error) {
+        console.error('Room restore failed:', payload?.code, error);
+      }
+    }
+    if (rooms.size > 0) console.log(`Restored ${rooms.size} room(s) from snapshots`);
+  }
+
   await new Promise((resolve, reject) => {
     httpServer.once('error', reject);
     httpServer.listen(port, host, resolve);
   });
   actualPort = httpServer.address().port;
+  restoreRooms();
   return {
-    app, httpServer, io, rooms, port: actualPort,
+    app, httpServer, io, rooms, db, port: actualPort,
     async close() {
+      if (closed) return;
+      closed = true;
       closing = true;
       for (const room of rooms.values()) {
         clearTurn(room);
@@ -557,8 +935,15 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
         for (const p of room.players) clearTimeout(p.disconnectTimer);
       }
       io.removeAllListeners('connection');
+      // 先关 socket：断开过程中还会触发广播写快照，数据库必须保持打开。
       await new Promise(resolve => io.close(resolve));
       for (const room of rooms.values()) for (const p of room.players) clearTimeout(p.disconnectTimer);
+      // 正常关闭：把真人玩家桌上筹码退回钱包并清掉快照，避免重启后按快照重复入账。
+      for (const room of rooms.values()) {
+        for (const p of room.players) refundPlayer(room, p);
+      }
+      clearSnapshots(db);
+      db.close();
       rooms.clear();
     },
   };

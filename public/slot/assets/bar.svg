@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="BAR">
+  <rect x="18" y="42" width="124" height="76" rx="8" fill="#171615" stroke="#47d7ac" stroke-width="7"/>
+  <rect x="29" y="54" width="102" height="52" rx="3" fill="#f8f1df"/>
+  <text x="80" y="93" fill="#171615" font-family="Arial Black,Arial,sans-serif" font-size="43" font-weight="900" text-anchor="middle">BAR</text>
+</svg>

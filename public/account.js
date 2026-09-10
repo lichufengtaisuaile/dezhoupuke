@@ -103,7 +103,7 @@
     return hash % 6;
   }
   function avatarMarkup(name) {
-    return `<span class="seat-avatar is-self account-avatar"><img src="/avatars/player-${avatarIndex(name) + 1}.svg" width="64" height="64" alt="" draggable="false" /></span>`;
+    return `<span class="account-avatar"><img src="/avatars/player-${avatarIndex(name) + 1}.svg" width="64" height="64" alt="" draggable="false" /></span>`;
   }
   function cardMarkup(card) {
     if (!card) return "";

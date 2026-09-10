@@ -29,8 +29,13 @@
   color: #8fa098;
   text-align: center;
 }
-.account-avatar { display: inline-flex; }
-.account-avatar img { width: 45px; height: 45px; }
+.account-avatar {
+  display: inline-flex;
+  flex: none;
+  border-radius: 50%;
+  overflow: hidden;
+}
+.account-avatar img { width: 45px; height: 45px; border-radius: inherit; object-fit: cover; }
 
 .pos { color: var(--green); }
 .neg { color: var(--red); }

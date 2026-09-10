@@ -80,7 +80,7 @@ test('legacy ledger (six-type CHECK) migrates losslessly to the eight-type schem
 });
 
 test('slot spin: server draws, settles, records, and reports balance', async (t) => {
-  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:' });
+  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:', npcTables: 0 });
   t.after(async () => { await server.close(); });
 
   const reg = (await api(server.port, 'POST', '/api/register', { body: { name: 'spinner', password: 'secret123' } })).json;
@@ -123,7 +123,7 @@ test('slot spin: server draws, settles, records, and reports balance', async (t)
 });
 
 test('slot spin idempotency: replaying the same spinId settles once and returns the same result', async (t) => {
-  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:' });
+  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:', npcTables: 0 });
   t.after(async () => { await server.close(); });
 
   const reg = (await api(server.port, 'POST', '/api/register', { body: { name: 'retry', password: 'secret123' } })).json;
@@ -151,7 +151,7 @@ test('slot spin idempotency: replaying the same spinId settles once and returns 
 });
 
 test('slot accepts custom bets between 10 and 100000 outside the preset tiers', async (t) => {
-  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:' });
+  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:', npcTables: 0 });
   t.after(async () => { await server.close(); });
 
   const reg = (await api(server.port, 'POST', '/api/register', { body: { name: 'custom', password: 'secret123' } })).json;
@@ -172,7 +172,7 @@ test('slot accepts custom bets between 10 and 100000 outside the preset tiers', 
 });
 
 test('slot spin rejects bad bets and insufficient balance with 400', async (t) => {
-  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:' });
+  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:', npcTables: 0 });
   t.after(async () => { await server.close(); });
 
   const reg = (await api(server.port, 'POST', '/api/register', { body: { name: 'broke', password: 'secret123' } })).json;
@@ -203,7 +203,7 @@ test('slot spin rejects bad bets and insufficient balance with 400', async (t) =
 });
 
 test('spins history endpoints paginate for the drawer and limit for the slot page', async (t) => {
-  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:' });
+  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:', npcTables: 0 });
   t.after(async () => { await server.close(); });
 
   const reg = (await api(server.port, 'POST', '/api/register', { body: { name: 'regular', password: 'secret123' } })).json;

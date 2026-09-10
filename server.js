@@ -14,6 +14,8 @@ import * as wallet from './src/wallet.js';
 import * as stats from './src/stats.js';
 import * as slot from './src/slot.js';
 import * as adminOps from './src/admin.js';
+import { decideBotAction, normalizeDifficulty } from './src/bot.js';
+import * as npc from './src/npc.js';
 import './public/social-catalog.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -43,7 +45,8 @@ export function networkUrls(port) {
     .map(entry => `http://${entry.address}:${port}`);
 }
 
-export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTimeoutMs = 30000, botDelayMs = 1100, disconnectGraceMs = 90000, nextHandDelayMs = 5000, dbPath = path.join(ROOT, 'data', 'dezhou.db'), requireAuth = true, adminToken = process.env.DEZHOU_ADMIN_TOKEN ?? '' } = {}) {
+export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTimeoutMs = 30000, botDelayMs = 1100, disconnectGraceMs = 90000, nextHandDelayMs = 5000, dbPath = path.join(ROOT, 'data', 'dezhou.db'), requireAuth = true, adminToken = process.env.DEZHOU_ADMIN_TOKEN ?? '', npcTables = Number(process.env.NPC_TABLES ?? 2), npcHealIntervalMs = 30000, npcBaseDelayMs = 800, npcJitterMs = 1800 } = {}) {
+  const npcTableCount = Number.isSafeInteger(npcTables) ? Math.min(Math.max(npcTables, 0), npc.NPC_TABLE_CODES.length) : 2;
   const app = express();
   const httpServer = createServer(app);
   const io = new Server(httpServer, { maxHttpBufferSize: 8192, serveClient: true });
@@ -232,7 +235,8 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
   }
   function canAutoStart(room) {
     return !closing && rooms.get(room.code) === room && room.autoNext
-      && room.phase === 'finished' && activePlayers(room).length >= 2;
+      && (room.phase === 'finished' || (room.npcTable && room.phase === 'lobby'))
+      && activePlayers(room).length >= 2;
   }
   function scheduleNextHand(room) {
     if (!canAutoStart(room)) { clearNextHand(room); return; }
@@ -274,13 +278,19 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       autoNext: room.autoNext, nextHandAt: room.nextHandAt, practice: room.practice,
       smallBlind: room.smallBlind, bigBlind: room.bigBlind, buyIn: room.buyIn,
       maxPlayers: 6, hostId: room.hostId, selfId: viewer.id,
-      players: room.players.map(p => ({
-        id: p.id, name: p.name, seat: p.seat, stack: p.stack, bet: p.bet,
-        connected: p.connected, isBot: p.isBot, folded: p.folded, inHand: p.inHand,
-        hasCards: p.inHand && Boolean(room.holeCards[p.seat]),
-        cards: p.inHand && (p.id === viewer.id || room.revealed.has(p.seat)) ? room.holeCards[p.seat] ?? null : null,
-        lastAction: p.lastAction, winner: room.result.some(r => r.id === p.id),
-      })),
+      players: room.players.map(p => {
+        // NPC 对外完全表现为真人：剥离 isBot/difficulty，在线状态恒真。
+        const hidden = p.npc === true;
+        return {
+          id: p.id, name: p.name, seat: p.seat, stack: p.stack, bet: p.bet,
+          connected: hidden ? true : p.connected, isBot: hidden ? false : p.isBot,
+          folded: p.folded, inHand: p.inHand,
+          ...(p.isBot && !hidden ? { difficulty: p.botDifficulty ?? 'normal' } : {}),
+          hasCards: p.inHand && Boolean(room.holeCards[p.seat]),
+          cards: p.inHand && (p.id === viewer.id || room.revealed.has(p.seat)) ? room.holeCards[p.seat] ?? null : null,
+          lastAction: p.lastAction, winner: room.result.some(r => r.id === p.id),
+        };
+      }),
       board: room.board, round: room.round, pot: room.pot,
       pots: room.pots.map(p => ({ size: p.size })),
       dealerSeat: room.dealerSeat, turnSeat, turnDeadline: room.turnDeadline,
@@ -301,7 +311,8 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
   }
   function lobbyRooms() {
     return [...rooms.values()]
-      .filter(room => room.players.some(player => !player.isBot && !player.departing))
+      // NPC 系统桌也要让真人能在大厅找到（看起来像普通的满员桌）。
+      .filter(room => room.npcTable || room.players.some(player => !player.isBot && !player.departing))
       .map(room => ({
         code: room.code,
         hostName: room.players.find(player => player.id === room.hostId)?.name ?? '',
@@ -362,7 +373,8 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
   function transferHost(room) {
     const current = room.players.find(p => p.id === room.hostId);
     if (current?.connected && !current.departing) return;
-    const next = room.players.find(p => !p.isBot && p.connected && !p.departing);
+    const next = room.players.find(p => !p.isBot && p.connected && !p.departing)
+      ?? (room.npcTable ? room.players.find(p => p.isBot && !p.departing) : null);
     if (next) {
       room.hostId = next.id;
       log(room, `${next.name} 成为房主`);
@@ -381,7 +393,8 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
     refundPlayer(room, player);
     room.players = room.players.filter(p => p !== player);
     transferHost(room);
-    if (!room.players.some(p => !p.isBot && !p.departing)) {
+    // NPC 系统桌没有真人也会保留（自愈循环负责补位与重建）。
+    if (!room.npcTable && !room.players.some(p => !p.isBot && !p.departing)) {
       clearTurn(room);
       clearNextHand(room);
       for (const p of room.players) { clearTimeout(p.disconnectTimer); refundPlayer(room, p); }
@@ -464,22 +477,24 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
     const legal = getLegal(room);
     const seat = room.table.playerToAct();
     const player = playerAt(room, seat);
-    const cards = room.holeCards[seat] ?? [];
-    const ranks = cards.map(c => '23456789TJQKA'.indexOf(c.rank) + 2);
-    const strong = ranks[0] === ranks[1] || ranks.reduce((a, b) => a + b, 0) >= 24;
-    const choice = randomInt(100);
-    if (legal.minRaise !== null && strong && choice < 24) {
-      return { action: legal.actions.includes('raise') ? 'raise' : 'bet', amount: Math.min(legal.maxRaise, Math.max(legal.minRaise, room.bigBlind * 3)) };
-    }
-    if (legal.actions.includes('check')) return { action: 'check' };
-    if (legal.actions.includes('call') && (strong || legal.callAmount <= room.bigBlind * 3 || (legal.callAmount < player.stack / 4 && choice < 65))) return { action: 'call' };
-    return { action: 'fold' };
+    return decideBotAction({
+      difficulty: player.botDifficulty,
+      holeCards: room.holeCards[seat] ?? [],
+      communityCards: room.board ?? [],
+      legal,
+      stack: player.stack,
+      pot: room.pot,
+      bigBlind: room.bigBlind,
+      position: room.dealerSeat === null || room.dealerSeat === undefined
+        ? null : (player.seat - room.dealerSeat + 6) % 6,
+      playersInHand: room.players.filter(p => p.inHand && !p.folded).length,
+    });
   }
   function scheduleTurn(room) {
     clearTurn(room);
     if (!isPlaying(room)) return;
     const player = playerAt(room, room.table.playerToAct());
-    const delay = player.isBot ? botDelayMs : player.departing ? Math.min(200, turnTimeoutMs) : turnTimeoutMs;
+    const delay = player.npc ? npcThinkDelay() : player.isBot ? botDelayMs : player.departing ? Math.min(200, turnTimeoutMs) : turnTimeoutMs;
     room.turnDeadline = Date.now() + delay;
     const turnId = ++room.turnId;
     room.timer = setTimeout(() => {
@@ -533,10 +548,13 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
   }
   function startHand(room) {
     requireThat(!isPlaying(room), '本手尚未结束');
+    // NPC 资金循环：低于最小带入先从自己钱包补足（不够按正常规则领每日补助），
+    // 发生在 activePlayers 过滤之前，确保桌上始终有 ≥2 个可开局的 NPC。
+    for (const p of room.players) if (p.npc && !p.departing) npcTopUp(room, p);
     const active = activePlayers(room);
     requireThat(active.length >= 2, '至少需要两位在线且有筹码的玩家');
     clearNextHand(room);
-    for (const p of active) if (p.isBot && p.stack === 0) { p.stack = room.buyIn; log(room, `${p.name} 补充 ${room.buyIn} 筹码`); }
+    for (const p of active) if (p.isBot && !p.npc && p.stack === 0) { p.stack = room.buyIn; log(room, `${p.name} 补充 ${room.buyIn} 筹码`); }
     room.table = createTable({ smallBlind: room.smallBlind, bigBlind: room.bigBlind }, 6);
     room.startStacks = new Map(active.map(p => [p.id, p.stack]));
     room.result = []; room.revealed.clear(); room.board = []; room.pots = []; room.pot = 0;
@@ -556,7 +574,7 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
   }
   // account 为 null 表示免登录模式（旧行为/测试）：入座发免费筹码。
   // 真人桌账号玩家从钱包扣带入金额（BRING_IN 流水）；练习桌用免费练习筹码。
-  function newPlayer(room, name, { bot = false, account = null, bringIn = null } = {}) {
+  function newPlayer(room, name, { bot = false, account = null, bringIn = null, difficulty = null } = {}) {
     requireThat(room.players.length < 6, '房间已满，最多 6 人');
     requireThat(!room.players.some(p => p.name === name), '这个昵称已被使用');
     const seat = Array.from({ length: 6 }, (_, n) => n).find(n => !room.players.some(p => p.seat === n));
@@ -576,10 +594,111 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       stack, bet: 0, connected: bot, isBot: bot, socketId: null,
       folded: false, inHand: false, lastAction: '', departing: false, disconnectTimer: null,
       lastReactionAt: null, accountId: account?.id ?? null,
+      botDifficulty: bot ? normalizeDifficulty(difficulty ?? 'normal') : null,
+      npc: false,
     };
     room.players.push(player);
     log(room, `${name} 入座${isPlaying(room) ? '，等待下一手' : ''}`);
     return player;
+  }
+
+  // ---------- 常驻 NPC 系统桌 ----------
+  // NPC 是有真实账号的电脑玩家（accounts.npc=1），坐满两张系统桌的大部分座位，
+  // 对外广播剥离 isBot/difficulty（见 snapshot），表现得和真人完全一样；
+  // 资金循环走与真人同一套钱包规则（BRING_IN/CASH_OUT/SUBSIDY），战绩计入排行榜。
+  const NPC_SMALL_BLIND = 5;
+  const NPC_BIG_BLIND = 10;
+  const NPC_STACK_TARGET = 500; // 桌上目标筹码（介于最小带入 200 与常见买入之间）
+  const npcAccounts = npcTableCount > 0 ? npc.ensureNpcAccounts(db) : [];
+  const npcThinkDelay = () => npcBaseDelayMs + randomInt(npcJitterMs + 1);
+
+  function createNpcRoom(code) {
+    const room = {
+      code, smallBlind: NPC_SMALL_BLIND, bigBlind: NPC_BIG_BLIND, buyIn: NPC_STACK_TARGET,
+      phase: 'lobby', players: [], hostId: null, practice: false, npcTable: true,
+      handNumber: 0, turnId: 0, turnDeadline: null, timer: null, table: null,
+      autoNext: true, nextHandAt: null, nextHandTimer: null,
+      board: [], holeCards: [], pot: 0, pots: [], round: null, dealerSeat: null,
+      result: [], revealed: new Set(), log: [], logSequence: 0, startStacks: new Map(),
+    };
+    rooms.set(code, room);
+    return room;
+  }
+  // NPC 入座：从自己的钱包真实带入（与真人 join 同一套扣款）。
+  // 钱包连最小带入（BB×20=200）都不够时不入座，等补助/自愈下轮再试。
+  function seatNpc(room, entry) {
+    const min = room.bigBlind * 20;
+    const balance = wallet.balanceOf(db, entry.accountId);
+    const amount = Math.min(NPC_STACK_TARGET, balance);
+    if (amount < min) return null;
+    try {
+      const player = newPlayer(room, entry.name, {
+        bot: true, account: { id: entry.accountId }, bringIn: amount, difficulty: entry.difficulty,
+      });
+      player.npc = true;
+      return player;
+    } catch (error) {
+      if (error instanceof GameError) return null; // 重名/满员：换个 NPC 下轮再补
+      throw error;
+    }
+  }
+  // 每手开始前/自愈时的资金补足：stack 低于最小带入就从自己钱包 BRING_IN 到目标，
+  // 钱包不够先按正常规则领每日补助（限每日一次，与真人完全同规则）。
+  // 全程复用 wallet 事务入口，重复调用只会补到目标，不会重复扣。
+  function npcTopUp(room, player) {
+    const min = room.bigBlind * 20;
+    if (player.stack >= min) return;
+    const need = NPC_STACK_TARGET - player.stack;
+    if (wallet.balanceOf(db, player.accountId) + player.stack < wallet.SUBSIDY_THRESHOLD) {
+      try { wallet.grantSubsidy(db, player.accountId); } catch { /* 今日已领过，按规则不能再领 */ }
+    }
+    const amount = Math.min(need, wallet.balanceOf(db, player.accountId));
+    if (amount < min) return; // 连最小带入都不够：保留桌上残码继续，等明天补助
+    wallet.bringIn(db, player.accountId, amount, room.code);
+    player.stack += amount;
+    log(room, `${player.name} 带入 ${amount} 筹码`);
+  }
+  // 自愈：桌子缺失重建；被封禁的 NPC 移出且不再加回；NPC 数补到 clamp(5-真人, 0, 5)；
+  // 多余 NPC（真人占座导致超员）在非对局时起身让位；资金不足的桌上 NPC 尝试补足。
+  // 每次调整完 broadcast，由 scheduleNextHand 自动开下一手（NPC 桌无需真人动作）。
+  function healNpcTables() {
+    if (closing || npcTableCount <= 0) return;
+    for (const [index, code] of npc.NPC_TABLE_CODES.entries()) {
+      if (index >= npcTableCount) break;
+      try {
+        let room = rooms.get(code);
+        if (!room) room = createNpcRoom(code);
+        for (const player of [...room.players]) {
+          if (player.npc && npc.isNpcBanned(db, player.accountId)) removePlayer(room, player);
+        }
+        const humans = room.players.filter(p => !p.isBot && !p.departing).length;
+        const target = Math.min(Math.max(5 - humans, 0), 5);
+        const npcs = room.players.filter(p => p.npc && !p.departing);
+        if (npcs.length > target && !isPlaying(room)) {
+          for (const player of npcs.slice(0, npcs.length - target)) removePlayer(room, player);
+        }
+        let seated = room.players.filter(p => p.npc && !p.departing).length;
+        for (const entry of npcAccounts) {
+          if (seated >= target) break;
+          if (npc.isNpcBanned(db, entry.accountId)) continue;
+          if (room.players.some(p => p.accountId === entry.accountId && !p.departing)) continue;
+          if (seatNpc(room, entry)) seated += 1;
+        }
+        for (const player of room.players) {
+          if (player.npc && !player.departing && player.stack < room.bigBlind * 20) npcTopUp(room, player);
+        }
+        if (!room.players.some(p => p.id === room.hostId && !p.departing)) transferHost(room);
+        if (room.players.length > 0) broadcast(room);
+      } catch (error) {
+        console.error('NPC heal failed:', code, error);
+      }
+    }
+  }
+  let npcHealTimer = null;
+  if (npcTableCount > 0) {
+    // 首次自愈在 restoreRooms() 之后执行（见文件末尾启动流程），避免快照恢复覆盖新建桌。
+    npcHealTimer = setInterval(healNpcTables, npcHealIntervalMs);
+    npcHealTimer.unref();
   }
   function associate(socket, room, player) {
     clearTimeout(player.disconnectTimer);
@@ -634,7 +753,7 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       }
     }
     for (const room of [...rooms.values()]) {
-      const player = room.players.find(p => p.accountId === accountId && !p.isBot);
+      const player = room.players.find(p => p.accountId === accountId && (!p.isBot || p.npc));
       if (!player) continue;
       clearTimeout(player.disconnectTimer);
       player.socketId = null;
@@ -769,12 +888,12 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       broadcast(room);
       return response;
     });
-    on('room:bot', () => {
+    on('room:bot', input => {
       const { room, player } = member(socket); hostOnly(room, player);
       requireThat(!isPlaying(room), '本手结束后可以添加陪练');
       const name = BOT_NAMES.find(n => !room.players.some(p => p.name === `${n}·陪练`));
       requireThat(name, '陪练已全部入座');
-      newPlayer(room, `${name}·陪练`, { bot: true });
+      newPlayer(room, `${name}·陪练`, { bot: true, difficulty: normalizeDifficulty(input?.difficulty) });
       broadcast(room);
     });
     on('room:remove-bot', input => {
@@ -880,7 +999,8 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       try {
         const room = {
           code: payload.code, smallBlind: payload.smallBlind, bigBlind: payload.bigBlind, buyIn: payload.buyIn,
-          practice: Boolean(payload.practice), phase: payload.phase, players: [], hostId: payload.hostId ?? null,
+          practice: Boolean(payload.practice), npcTable: Boolean(payload.npcTable),
+          phase: payload.phase, players: [], hostId: payload.hostId ?? null,
           handNumber: payload.handNumber ?? 0, turnId: 0, turnDeadline: null, timer: null, table: null,
           autoNext: payload.autoNext !== false, nextHandAt: null, nextHandTimer: null,
           board: [], holeCards: [], pot: 0, pots: [], round: null,
@@ -893,6 +1013,8 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
           stack: p.stack, bet: p.bet, connected: Boolean(p.isBot), isBot: Boolean(p.isBot), socketId: null,
           folded: false, inHand: false, lastAction: '', departing: false, disconnectTimer: null,
           lastReactionAt: null, accountId: p.accountId ?? null,
+          botDifficulty: p.isBot ? normalizeDifficulty(p.difficulty) : null,
+          npc: Boolean(p.npc),
         }));
         if (room.phase === 'playing') {
           for (const p of room.players) { p.stack += p.bet; p.bet = 0; }
@@ -923,12 +1045,14 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
   });
   actualPort = httpServer.address().port;
   restoreRooms();
+  healNpcTables();
   return {
     app, httpServer, io, rooms, db, port: actualPort,
     async close() {
       if (closed) return;
       closed = true;
       closing = true;
+      clearInterval(npcHealTimer);
       for (const room of rooms.values()) {
         clearTurn(room);
         clearNextHand(room);

@@ -126,7 +126,7 @@
       elements.usersEmpty.hidden = data.users.length > 0;
       elements.usersBody.innerHTML = data.users.map((user) => `
         <tr data-user-id="${esc(user.id)}">
-          <td><span class="admin-name">${esc(user.name)}</span></td>
+          <td><span class="admin-name">${esc(user.name)}</span>${user.isNpc ? '<span class="admin-badge is-npc" title="系统常驻 NPC（有真实经济身份，对外不可见）">NPC</span>' : ""}</td>
           <td><span class="admin-badge${user.isBanned ? " is-banned" : ""}">${user.isBanned ? "已封禁" : "正常"}</span></td>
           <td>${fmtMoney(user.balance)}</td>
           <td>${fmtMoney(user.tableStack)}</td>

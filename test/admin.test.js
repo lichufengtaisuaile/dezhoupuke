@@ -70,7 +70,7 @@ function stateWhere(client, predicate, timeout = WAIT_MS) {
 }
 
 test('admin api without adminToken returns 503, wrong token returns 401', async (t) => {
-  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:' });
+  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:', npcTables: 0 });
   t.after(async () => { await server.close(); });
   await api(server.port, 'POST', '/api/register', { body: { name: 'plain', password: 'secret123' } });
 
@@ -92,7 +92,7 @@ test('admin api without adminToken returns 503, wrong token returns 401', async 
 });
 
 test('admin users list carries stats and supports name search', async (t) => {
-  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:', adminToken: ADMIN_TOKEN });
+  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:', adminToken: ADMIN_TOKEN, npcTables: 0 });
   t.after(async () => { await server.close(); });
 
   const alice = (await admin(server.port, 'POST', '/api/register', { body: { name: 'alice', password: 'secret123' } })).json;
@@ -127,7 +127,7 @@ test('admin users list carries stats and supports name search', async (t) => {
 });
 
 test('admin adjust: positive/negative balance, ADMIN_ADJUST ledger, audit trail, validation', async (t) => {
-  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:', adminToken: ADMIN_TOKEN });
+  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:', adminToken: ADMIN_TOKEN, npcTables: 0 });
   t.after(async () => { await server.close(); });
 
   const reg = (await admin(server.port, 'POST', '/api/register', { body: { name: 'target', password: 'secret123' } })).json;
@@ -175,7 +175,7 @@ test('admin adjust: positive/negative balance, ADMIN_ADJUST ledger, audit trail,
 });
 
 test('admin ban: kicks from room with CASH_OUT refund, blocks login/socket/REST, unban restores', async (t) => {
-  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:', adminToken: ADMIN_TOKEN });
+  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:', adminToken: ADMIN_TOKEN, npcTables: 0 });
   t.after(async () => { await server.close(); });
 
   const reg = (await admin(server.port, 'POST', '/api/register', { body: { name: 'cheater', password: 'secret123' } })).json;
@@ -234,7 +234,7 @@ test('admin ban: kicks from room with CASH_OUT refund, blocks login/socket/REST,
 });
 
 test('admin ban mid-hand: engine fold advances the hand, stack refunded exactly once', async (t) => {
-  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:', adminToken: ADMIN_TOKEN });
+  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:', adminToken: ADMIN_TOKEN, npcTables: 0 });
   t.after(async () => { await server.close(); });
 
   const hostReg = (await admin(server.port, 'POST', '/api/register', { body: { name: 'hoster', password: 'secret123' } })).json;

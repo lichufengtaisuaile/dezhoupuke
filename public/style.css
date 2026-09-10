@@ -847,6 +847,28 @@ select:focus {
   padding: 0 3px;
   font-weight: 400;
 }
+.bot-badge {
+  font-size: 9px;
+  border-radius: 3px;
+  padding: 0 3px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.bot-badge.bot-easy {
+  color: #9fb3a7;
+  border: 1px solid #45564c;
+}
+.bot-badge.bot-normal {
+  color: #8fd3a8;
+  border: 1px solid #4d7a5e;
+}
+.bot-badge.bot-hard {
+  color: #f0a4a4;
+  border: 1px solid #8a4d4d;
+}
+.bot-difficulty {
+  margin-bottom: 8px;
+}
 .seat-stack {
   font-size: 14px;
   line-height: 20px;

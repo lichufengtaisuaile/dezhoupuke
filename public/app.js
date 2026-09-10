@@ -414,7 +414,7 @@
           : "";
       return `<div class="seat position-${position} ${own ? "self" : ""} ${active ? "active" : ""} ${player.folded ? "folded" : ""} ${player.winner ? "winner" : ""}" data-player-id="${esc(player.id)}" aria-label="${esc(player.name)}，筹码 ${money(player.stack)}，${esc(actionText(player))}">
         <span class="seat-bet" data-chip-anchor="bet:${esc(player.id)}" style="visibility:${player.bet > 0 ? "visible" : "hidden"}">${window.chipPileMarkup(player.bet, "bet")}<span class="bet-amount chip-money" data-money-key="bet:${esc(player.id)}">${money(player.bet)}</span></span>
-        <div class="seat-cards">${cards}</div><div class="seat-body">${state.dealerSeat === seat ? '<span class="seat-dealer" title="庄家">D</span>' : ""}${window.playerAvatarMarkup(player, own)}<div class="seat-details"><div class="seat-name">${player.isBot ? '<i data-lucide="bot"></i>' : ""}<span title="${esc(player.name)}">${esc(player.name)}</span>${own ? '<b class="self-tag">你</b>' : ""}</div>
+        <div class="seat-cards">${cards}</div><div class="seat-body">${state.dealerSeat === seat ? '<span class="seat-dealer" title="庄家">D</span>' : ""}${window.playerAvatarMarkup(player, own)}<div class="seat-details"><div class="seat-name">${player.isBot ? '<i data-lucide="bot"></i>' : ""}<span title="${esc(player.name)}">${esc(player.name)}</span>${player.isBot && player.difficulty ? `<b class="bot-badge bot-${esc(player.difficulty)}" title="陪练难度：${{ easy: "简单", normal: "正常", hard: "困难" }[player.difficulty]}">${{ easy: "易", normal: "普", hard: "难" }[player.difficulty]}</b>` : ""}${own ? '<b class="self-tag">你</b>' : ""}</div>
         <div class="seat-bank" data-chip-anchor="bank:${esc(player.id)}">${window.chipPileMarkup(player.stack, "bank")}<div class="seat-stack chip-money" data-money-key="stack:${esc(player.id)}">${money(player.stack)}</div></div></div>
         ${active ? '<div class="seat-timer"><span id="seat-timer-bar"></span></div>' : ""}${removeButton}</div><span class="seat-status">${esc(actionText(player))}</span></div>`;
     }).join("");
@@ -726,8 +726,16 @@
     }
   }
 
+  function selectedBotDifficulty() {
+    return document.querySelector("#bot-difficulty button.active")?.dataset.difficulty ?? "normal";
+  }
+  document.querySelectorAll("#bot-difficulty button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll("#bot-difficulty button").forEach((peer) => peer.classList.toggle("active", peer === button));
+    });
+  });
   $("bot-button").addEventListener("click", async () => {
-    await exclusive("room:bot", {});
+    await exclusive("room:bot", { difficulty: selectedBotDifficulty() });
     renderRoom();
     icons();
   });

@@ -96,6 +96,12 @@
   background: #3a2426;
   color: #efa2a5;
 }
+.admin-badge.is-npc {
+  margin-left: 6px;
+  border-color: #3d5a6d;
+  background: #24333a;
+  color: #a2cfe5;
+}
 .admin-actions { display: flex; gap: 8px; }
 .admin-actions .button { min-height: 30px; padding: 4px 10px; font-size: 11px; }
 .admin-empty { padding: 26px; text-align: center; font-size: 12px; color: var(--muted); }

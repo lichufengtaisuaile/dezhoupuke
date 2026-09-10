@@ -14,7 +14,7 @@ export function usersPage(db, rooms, { q = '', page = 1 } = {}) {
   const args = keyword ? [`%${keyword.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`] : [];
   const total = db.prepare(`SELECT COUNT(*) AS count FROM accounts a ${clause}`).get(...args).count;
   const rows = db.prepare(`
-      SELECT a.id, a.name, a.is_banned AS isBanned, a.created_at AS createdAt, w.balance,
+      SELECT a.id, a.name, a.is_banned AS isBanned, a.npc, a.created_at AS createdAt, w.balance,
         (SELECT COUNT(*) FROM hand_players hp WHERE hp.account_id = a.id) AS handsPlayed,
         (SELECT COUNT(*) FROM spins s WHERE s.account_id = a.id) AS slotSpins,
         (SELECT COALESCE(SUM(hp.net), 0) FROM hand_players hp WHERE hp.account_id = a.id)
@@ -37,6 +37,7 @@ export function usersPage(db, rooms, { q = '', page = 1 } = {}) {
       id: row.id,
       name: row.name,
       isBanned: Boolean(row.isBanned),
+      isNpc: Boolean(row.npc),
       balance: row.balance,
       tableStack,
       totalAssets: row.balance + tableStack,

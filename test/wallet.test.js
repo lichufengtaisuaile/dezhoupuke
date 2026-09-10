@@ -186,7 +186,7 @@ test('settleHand writes hands and HAND_WIN memos idempotently without moving bal
 });
 
 test('auth-gated socket play: bring-in deducts, rebuy is refused, settlement settles, leave refunds', async (t) => {
-  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:' });
+  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:', npcTables: 0 });
   t.after(async () => { await server.close(); });
 
   const denied = await connect(server.port, null);
@@ -242,7 +242,7 @@ test('auth-gated socket play: bring-in deducts, rebuy is refused, settlement set
 });
 
 test('practice rooms use free chips, keep free rebuy, and skip the ledger', async (t) => {
-  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:' });
+  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:', npcTables: 0 });
   t.after(async () => { await server.close(); });
 
   const carol = (await api(server.port, 'POST', '/api/register', { body: { name: 'carol', password: 'secret123' } })).json;
@@ -297,7 +297,7 @@ test('restart restores seats and voids an in-progress hand without losing chips'
   });
   setup.close();
 
-  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath });
+  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath, npcTables: 0 });
   t.after(async () => {
     await server.close();
     rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });

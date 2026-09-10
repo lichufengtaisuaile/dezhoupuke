@@ -8,7 +8,8 @@ CREATE TABLE IF NOT EXISTS accounts (
   name TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   created_at INTEGER NOT NULL,
-  is_banned INTEGER NOT NULL DEFAULT 0
+  is_banned INTEGER NOT NULL DEFAULT 0,
+  npc INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -119,11 +120,15 @@ export function createDb(dbPath) {
   return db;
 }
 
-// 老库 accounts 没有 is_banned 列：ADD COLUMN 补上（DEFAULT 0，无损、幂等）。
+// 老库 accounts 缺少的列：ADD COLUMN 补上（DEFAULT 0，无损、幂等）。
+// is_banned 为管理后台封禁标记；npc 标记系统常驻 NPC 账号（有真实经济身份）。
 function migrateAccounts(db) {
   const columns = db.prepare('PRAGMA table_info(accounts)').all().map((column) => column.name);
   if (!columns.includes('is_banned')) {
     db.exec('ALTER TABLE accounts ADD COLUMN is_banned INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!columns.includes('npc')) {
+    db.exec('ALTER TABLE accounts ADD COLUMN npc INTEGER NOT NULL DEFAULT 0');
   }
 }
 
@@ -180,6 +185,7 @@ export function saveSnapshot(db, room) {
     log: room.log,
     logSequence: room.logSequence,
     revealed: [...room.revealed],
+    npcTable: Boolean(room.npcTable),
     players: room.players.map(p => ({
       id: p.id,
       accountId: p.accountId ?? null,
@@ -188,6 +194,8 @@ export function saveSnapshot(db, room) {
       stack: p.stack,
       bet: p.bet,
       isBot: Boolean(p.isBot),
+      npc: Boolean(p.npc),
+      difficulty: p.isBot ? (p.botDifficulty ?? 'normal') : null,
       folded: Boolean(p.folded),
       inHand: Boolean(p.inHand),
       departing: Boolean(p.departing),

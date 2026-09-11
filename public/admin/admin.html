@@ -104,14 +104,16 @@
           </table>
           <p class="admin-empty" id="usersEmpty" hidden>没有匹配的用户</p>
         </div>
+        <div class="admin-pager" id="usersPager" hidden></div>
 
         <section class="admin-audit">
           <div class="admin-audit-head">
             <h2>审计日志</h2>
-            <button type="button" class="button secondary" id="auditMore" hidden>加载更多</button>
+            <span class="admin-count" id="auditCount"></span>
           </div>
           <ul class="admin-audit-list" id="auditList"></ul>
           <p class="admin-empty" id="auditEmpty" hidden>还没有审计记录</p>
+          <div class="admin-pager" id="auditPager" hidden></div>
         </section>
       </main>
     </div>

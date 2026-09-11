@@ -27,7 +27,9 @@
     usersEmpty: $("usersEmpty"),
     auditList: $("auditList"),
     auditEmpty: $("auditEmpty"),
-    auditMore: $("auditMore"),
+    auditCount: $("auditCount"),
+    auditPager: $("auditPager"),
+    usersPager: $("usersPager"),
     adjustDialog: $("adjustDialog"),
     adjustForm: $("adjustForm"),
     adjustTarget: $("adjustTarget"),
@@ -40,8 +42,8 @@
 
   let token = sessionStorage.getItem(TOKEN_KEY) || "";
   let searchTimer = null;
-  let auditPage = 0;
-  let auditHasMore = false;
+  let usersCurrentPage = 1;
+  let auditCurrentPage = 1;
   let adjustUserId = null;
   let toastTimer = null;
 
@@ -113,7 +115,7 @@
       sessionStorage.setItem(TOKEN_KEY, token);
       showPanel();
       startNpcPolling();
-      await Promise.all([loadUsers(), loadAudit(true), loadNpcTables()]);
+      await Promise.all([loadUsers(), loadAudit(1), loadNpcTables()]);
     } catch (error) {
       sessionStorage.removeItem(TOKEN_KEY);
       token = "";
@@ -211,11 +213,43 @@
     }
   });
 
+  // ---------- 通用分页 ----------
+  // 页码窗口：首页/尾页 + 当前页前后各 2 页，中间用省略号；点击交给 onPage。
+  function renderPager(el, { page, pageSize, total, onPage }) {
+    const pages = Math.max(1, Math.ceil(total / pageSize));
+    if (pages <= 1) { el.hidden = true; el.innerHTML = ""; return; }
+    el.hidden = false;
+    const windowed = [];
+    for (let n = 1; n <= pages; n += 1) {
+      if (n === 1 || n === pages || Math.abs(n - page) <= 2) windowed.push(n);
+    }
+    const nums = [];
+    let prev = 0;
+    for (const n of windowed) {
+      if (n - prev > 1) nums.push('<span class="admin-pager-gap">…</span>');
+      nums.push(`<button type="button" data-page="${n}"${n === page ? ' disabled class="admin-pager-current"' : ""}>${n}</button>`);
+      prev = n;
+    }
+    el.innerHTML = `
+      <span class="admin-pager-info">共 ${fmtMoney(total)} 条 · 第 ${page} / ${pages} 页</span>
+      <div class="admin-pager-nav">
+        <button type="button" data-page="${page - 1}"${page <= 1 ? " disabled" : ""}>‹ 上一页</button>
+        ${nums.join("")}
+        <button type="button" data-page="${page + 1}"${page >= pages ? " disabled" : ""}>下一页 ›</button>
+      </div>`;
+    el.onclick = (event) => {
+      const button = event.target.closest("button[data-page]");
+      if (!button || button.disabled) return;
+      onPage(Number(button.dataset.page));
+    };
+  }
+
   // ---------- 用户列表 ----------
-  async function loadUsers() {
+  async function loadUsers(page = 1) {
     const q = elements.searchInput.value.trim();
     try {
-      const data = await adminApi(`/api/admin/users?page=1&q=${encodeURIComponent(q)}`);
+      const data = await adminApi(`/api/admin/users?page=${page}&q=${encodeURIComponent(q)}`);
+      usersCurrentPage = data.page;
       elements.usersCount.textContent = `共 ${data.total} 位用户`;
       elements.usersEmpty.hidden = data.users.length > 0;
       elements.usersBody.innerHTML = data.users.map((user) => `
@@ -236,6 +270,7 @@
             </div>
           </td>
         </tr>`).join("");
+      renderPager(elements.usersPager, { page: data.page, pageSize: data.pageSize, total: data.total, onPage: loadUsers });
     } catch (error) {
       toast(error.message, true);
       if (error.status === 401 || error.status === 503) showGate(error.message);
@@ -279,7 +314,7 @@
       });
       elements.adjustDialog.close();
       toast(`已调整，${result.name} 新余额 ${fmtMoney(result.balance)}`);
-      await Promise.all([loadUsers(), loadAudit(true)]);
+      await Promise.all([loadUsers(usersCurrentPage), loadAudit(1)]);
     } catch (error) {
       elements.adjustError.textContent = error.message;
       elements.adjustError.hidden = false;
@@ -295,7 +330,7 @@
         body: JSON.stringify({ banned }),
       });
       toast(banned ? `已封禁 ${result.name}` : `已解封 ${result.name}`);
-      await Promise.all([loadUsers(), loadAudit(true)]);
+      await Promise.all([loadUsers(usersCurrentPage), loadAudit(1)]);
     } catch (error) {
       toast(error.message, true);
     }
@@ -310,31 +345,24 @@
     }
     return esc(detail.reason || (detail.banned ? "封禁" : "解封"));
   }
-  async function loadAudit(reset = false) {
-    if (reset) {
-      auditPage = 0;
-      auditHasMore = false;
-      elements.auditList.innerHTML = "";
-    }
+  async function loadAudit(page = 1) {
     try {
-      const data = await adminApi(`/api/admin/audit?page=${auditPage + 1}`);
-      auditPage = data.page;
-      auditHasMore = auditPage * data.pageSize < data.total;
-      elements.auditMore.hidden = !auditHasMore;
-      elements.auditEmpty.hidden = data.total > 0 || elements.auditList.children.length > 0;
-      const rows = data.entries.map((entry) => `
+      const data = await adminApi(`/api/admin/audit?page=${page}`);
+      auditCurrentPage = data.page;
+      elements.auditCount.textContent = `共 ${data.total} 条`;
+      elements.auditEmpty.hidden = data.total > 0;
+      elements.auditList.innerHTML = data.entries.map((entry) => `
         <li>
           <time>${fmtTime(entry.time)}</time>
           <span class="admin-audit-action${entry.action === "BAN" ? " is-ban" : ""}">${ACTION_NAMES[entry.action] || esc(entry.action)}</span>
           <span class="admin-name">${esc(entry.targetName || "（已删除）")}</span>
           <span class="admin-audit-detail">${auditText(entry)}</span>
         </li>`).join("");
-      elements.auditList.insertAdjacentHTML("beforeend", rows);
+      renderPager(elements.auditPager, { page: data.page, pageSize: data.pageSize, total: data.total, onPage: loadAudit });
     } catch (error) {
       toast(error.message, true);
     }
   }
-  elements.auditMore.addEventListener("click", () => loadAudit(false));
 
   // ---------- 启动 ----------
   (async () => {
@@ -343,7 +371,7 @@
       await adminApi("/api/admin/users?page=1");
       showPanel();
       startNpcPolling();
-      await Promise.all([loadUsers(), loadAudit(true), loadNpcTables()]);
+      await Promise.all([loadUsers(), loadAudit(1), loadNpcTables()]);
     } catch (error) {
       sessionStorage.removeItem(TOKEN_KEY);
       token = "";

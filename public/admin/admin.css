@@ -106,6 +106,43 @@
 .admin-actions .button { min-height: 30px; padding: 4px 10px; font-size: 11px; }
 .admin-empty { padding: 26px; text-align: center; font-size: 12px; color: var(--muted); }
 
+.admin-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px 0 26px;
+}
+.admin-audit .admin-pager { margin-bottom: 0; }
+.admin-pager-info { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.admin-pager-nav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.admin-pager-nav button {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 10px;
+  background: #1c2420;
+  border: 1px solid #394541;
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.admin-pager-nav button:hover:not(:disabled) { border-color: #4d7a5e; color: #8fd3a8; }
+.admin-pager-nav button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.admin-pager-nav button.admin-pager-current {
+  opacity: 1;
+  border-color: #4d7a5e;
+  background: #24352b;
+  color: #8fd3a8;
+  font-weight: 600;
+}
+.admin-pager-gap { padding: 0 2px; color: var(--muted); font-size: 12px; }
+
 .admin-audit { margin-top: 30px; }
 .admin-audit-head {
   display: flex;

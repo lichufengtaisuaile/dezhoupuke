@@ -16,6 +16,7 @@ import * as slot from './src/slot.js';
 import * as adminOps from './src/admin.js';
 import { decideBotAction, normalizeDifficulty } from './src/bot.js';
 import * as npc from './src/npc.js';
+import { createMahjongService } from './src/mahjong-service.js';
 import './public/social-catalog.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -45,13 +46,14 @@ export function networkUrls(port) {
     .map(entry => `http://${entry.address}:${port}`);
 }
 
-export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTimeoutMs = 30000, botDelayMs = 1100, disconnectGraceMs = 90000, nextHandDelayMs = 5000, dbPath = path.join(ROOT, 'data', 'dezhou.db'), requireAuth = true, adminToken = process.env.DEZHOU_ADMIN_TOKEN ?? '', npcTables = Number(process.env.NPC_TABLES ?? 2), npcHealIntervalMs = 30000, npcBaseDelayMs = 800, npcJitterMs = 1800 } = {}) {
+export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTimeoutMs = 30000, botDelayMs = 1100, disconnectGraceMs = 90000, nextHandDelayMs = 5000, dbPath = path.join(ROOT, 'data', 'dezhou.db'), requireAuth = true, adminToken = process.env.DEZHOU_ADMIN_TOKEN ?? '', npcTables = Number(process.env.NPC_TABLES ?? 2), npcHealIntervalMs = 30000, npcBaseDelayMs = 800, npcJitterMs = 1800, mahjongTurnTimeoutMs = 20000, mahjongBotDelayMs = 750 } = {}) {
   const npcTableCount = Number.isSafeInteger(npcTables) ? Math.min(Math.max(npcTables, 0), npc.NPC_TABLE_CODES.length) : 2;
   const app = express();
   const httpServer = createServer(app);
   const io = new Server(httpServer, { maxHttpBufferSize: 8192, serveClient: true });
   const db = createDb(dbPath);
   const rooms = new Map();
+  let mahjong;
   let actualPort = port;
   let closing = false;
   let closed = false;
@@ -138,7 +140,7 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
   app.get('/api/me/tables', (req, res) => {
     const account = bearerAccount(req, res);
     if (!account) return;
-    try { res.json({ ok: true, tables: myTables(account.id) }); }
+    try { res.json({ ok: true, tables: [...myTables(account.id), ...mahjong.myTables(account.id)] }); }
     catch (error) { apiError(res, error); }
   });
   // 老虎机开奖：Bearer token，body { bet, spinId }。服务端 crypto 随机开奖，
@@ -184,7 +186,7 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
     if (!bearerAdmin(req, res)) return;
     try {
       const result = adminOps.setBanned(db, req.params.id, req.body?.banned);
-      if (result.banned) kickAccount(result.accountId);
+      if (result.banned) { kickAccount(result.accountId); mahjong.kickAccount(result.accountId); }
       res.json({ ok: true, ...result });
     } catch (error) { apiError(res, error); }
   });
@@ -210,6 +212,24 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
     } catch (error) { apiError(res, error); }
   });
   app.get('/vendor/lucide.js', (_req, res) => res.sendFile(path.join(ROOT, 'node_modules/lucide/dist/umd/lucide.js')));
+  app.get('/api/mahjong/rooms', (_req, res) => res.json({ ok: true, rooms: mahjong.lobbyRooms() }));
+  app.get('/api/mahjong/rules', (_req, res) => res.json({ ok: true, rules: mahjong.rules }));
+  app.get('/api/me/mahjong', (req, res) => {
+    const account = bearerAccount(req, res);
+    if (!account) return;
+    try { res.json({ ok: true, ...mahjong.store.historyPage(account.id, req.query.page) }); }
+    catch (error) { apiError(res, error); }
+  });
+  app.post('/api/me/subsidy', (req, res) => {
+    const account = bearerAccount(req, res);
+    if (!account) return;
+    try {
+      requireThat(stats.overview(db, rooms, account.id).totalAssets < wallet.SUBSIDY_THRESHOLD, '总资产不低于 2,000 时不能领取补助');
+      wallet.grantSubsidy(db, account.id);
+      res.json({ ok: true, ...stats.overview(db, rooms, account.id) });
+    } catch (error) { apiError(res, error); }
+  });
+  app.get(['/mahjong', '/mahjong/'], (_req, res) => res.sendFile(path.join(ROOT, 'public', 'mahjong', 'index.html')));
   // 老虎机独立游戏页：/slot/ 与 /slot 都落到 slot.html（静态目录的默认索引是 index.html）。
   app.get(['/slot', '/slot/'], (_req, res) => res.sendFile(path.join(ROOT, 'public', 'slot', 'slot.html')));
   // 管理员后台页（不进门户游戏卡片）。
@@ -843,7 +863,7 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       const buyIn = integer(input.buyIn ?? 2000, bigBlind * 20, 100000, '初始筹码');
       const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
       let code;
-      do { code = Array.from({ length: 6 }, () => alphabet[randomInt(alphabet.length)]).join(''); } while (rooms.has(code));
+      do { code = Array.from({ length: 6 }, () => alphabet[randomInt(alphabet.length)]).join(''); } while (rooms.has(code) || mahjong.hasCode(code));
       const room = {
         code, smallBlind, bigBlind, buyIn, phase: 'lobby', players: [], hostId: null,
         practice: input.practice === true,
@@ -948,8 +968,9 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       const room = membership ? rooms.get(membership.code) : null;
       const player = room?.players.find(p => p.accountId === account.id && !p.departing) ?? null;
       requireThat(!room?.practice, '练习桌使用免费练习筹码，无需补助');
-      let tableStack = 0;
+      let tableStack = mahjong.store.activeAssets().get(account.id) ?? 0;
       for (const other of rooms.values()) {
+        if (other.practice) continue;
         for (const seated of other.players) if (seated.accountId === account.id) tableStack += seated.stack;
       }
       const balance = wallet.balanceOf(db, account.id);
@@ -1044,14 +1065,17 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
     httpServer.listen(port, host, resolve);
   });
   actualPort = httpServer.address().port;
+  // Only the successfully bound server may recover Mahjong escrow and run its timers.
+  mahjong = createMahjongService({ io, db, pokerRooms: rooms, turnTimeoutMs: mahjongTurnTimeoutMs, botDelayMs: mahjongBotDelayMs });
   restoreRooms();
   healNpcTables();
   return {
-    app, httpServer, io, rooms, db, port: actualPort,
+    app, httpServer, io, rooms, mahjong, db, port: actualPort,
     async close() {
       if (closed) return;
       closed = true;
       closing = true;
+      mahjong.close();
       clearInterval(npcHealTimer);
       for (const room of rooms.values()) {
         clearTurn(room);

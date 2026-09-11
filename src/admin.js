@@ -1,5 +1,6 @@
 import { GameError, requireThat } from './errors.js';
 import { credit, balanceOf } from './wallet.js';
+import { hasMahjongTable, tableAssets } from './stats.js';
 
 export const ADMIN_PAGE_SIZE = 20;
 const AUDIT_ADMIN = 'token';
@@ -13,24 +14,25 @@ export function usersPage(db, rooms, { q = '', page = 1 } = {}) {
   const clause = keyword ? "WHERE a.name LIKE ? ESCAPE '\\'" : '';
   const args = keyword ? [`%${keyword.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`] : [];
   const total = db.prepare(`SELECT COUNT(*) AS count FROM accounts a ${clause}`).get(...args).count;
+  const hasMahjong = hasMahjongTable(db, 'mahjong_round_players');
+  const mahjongRoundsSql = hasMahjong ? '(SELECT COUNT(*) FROM mahjong_round_players mp WHERE mp.account_id = a.id)' : '0';
+  const mahjongNetSql = hasMahjong ? '(SELECT COALESCE(SUM(mp.net), 0) FROM mahjong_round_players mp WHERE mp.account_id = a.id)' : '0';
+  const mahjongWinsSql = hasMahjong ? '(SELECT COALESCE(SUM(mp.wins), 0) FROM mahjong_round_players mp WHERE mp.account_id = a.id)' : '0';
   const rows = db.prepare(`
       SELECT a.id, a.name, a.is_banned AS isBanned, a.npc, a.created_at AS createdAt, w.balance,
         (SELECT COUNT(*) FROM hand_players hp WHERE hp.account_id = a.id) AS handsPlayed,
         (SELECT COUNT(*) FROM spins s WHERE s.account_id = a.id) AS slotSpins,
+        ${mahjongRoundsSql} AS mahjongRounds,
+        ${mahjongNetSql} AS mahjongNet,
+        ${mahjongWinsSql} AS mahjongHuCount,
         (SELECT COALESCE(SUM(hp.net), 0) FROM hand_players hp WHERE hp.account_id = a.id)
-          + (SELECT COALESCE(SUM(s.net), 0) FROM spins s WHERE s.account_id = a.id) AS netProfit
+          + (SELECT COALESCE(SUM(s.net), 0) FROM spins s WHERE s.account_id = a.id)
+          + ${mahjongNetSql} AS netProfit
       FROM accounts a JOIN wallets w ON w.account_id = a.id
       ${clause}
       ORDER BY a.created_at DESC, a.id DESC LIMIT ? OFFSET ?`)
     .all(...args, ADMIN_PAGE_SIZE, (current - 1) * ADMIN_PAGE_SIZE);
-  const stacks = new Map();
-  for (const room of rooms.values()) {
-    if (room.practice) continue;
-    for (const player of room.players) {
-      if (!player.accountId || player.departing) continue;
-      stacks.set(player.accountId, (stacks.get(player.accountId) ?? 0) + player.stack);
-    }
-  }
+  const stacks = tableAssets(db, rooms);
   const users = rows.map((row) => {
     const tableStack = stacks.get(row.id) ?? 0;
     return {
@@ -43,6 +45,9 @@ export function usersPage(db, rooms, { q = '', page = 1 } = {}) {
       totalAssets: row.balance + tableStack,
       handsPlayed: row.handsPlayed,
       slotSpins: row.slotSpins,
+      mahjongRounds: row.mahjongRounds,
+      mahjongNet: row.mahjongNet,
+      mahjongHuCount: row.mahjongHuCount,
       netProfit: row.netProfit,
       createdAt: row.createdAt,
     };

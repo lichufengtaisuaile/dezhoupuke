@@ -225,6 +225,21 @@
 .profile-ledger-side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
 .profile-ledger-side strong { font-size: 14px; font-variant-numeric: tabular-nums; }
 .profile-ledger-after { font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.profile-ledger-note { font-size: 10px; line-height: 1.5; color: #93a598; }
+
+/* 麻将局内账单只展示当时已公开的胡牌组合。 */
+.profile-mahjong-details { margin-top: 10px; font-size: 12px; color: #c3d2c6; }
+.profile-mahjong-details summary { cursor: pointer; padding: 8px 0; color: #a9d8ba; }
+.profile-mahjong-scores { list-style: none; margin: 4px 0 12px; padding: 9px 11px; background: #ffffff04; border-radius: 6px; }
+.profile-mahjong-scores li, .profile-mahjong-event-top { display: flex; justify-content: space-between; gap: 10px; line-height: 1.8; }
+.profile-mahjong-scores li span, .profile-mahjong-event-top span { min-width: 0; overflow-wrap: anywhere; }
+.profile-mahjong-scores strong, .profile-mahjong-event-top strong { flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.profile-mahjong-events { list-style: none; margin: 0; padding: 0; }
+.profile-mahjong-events > li { border-top: 1px solid #2c3833; padding: 10px 0; }
+.profile-mahjong-events p { margin: 5px 0; font-size: 11px; line-height: 1.7; color: #9fb0a5; overflow-wrap: anywhere; }
+.profile-mahjong-tiles { display: flex; flex-wrap: wrap; gap: 3px; margin: 7px 0; }
+.profile-mahjong-tile { display: inline-grid; place-items: center; flex: 0 0 24px; width: 24px; height: 34px; border: 1px solid #f6edd6; border-radius: 3px; background: linear-gradient(135deg, #fffaf0, #e7ddc3); box-shadow: inset 0 -1px #d4c5a3, 0 2px #53816b; }
+.profile-mahjong-tile > svg { display: block; width: 100%; height: 100%; pointer-events: none; }
 
 /* 老虎机页签 */
 .profile-slot-symbols { display: flex; align-items: center; gap: 8px; margin-top: 9px; }

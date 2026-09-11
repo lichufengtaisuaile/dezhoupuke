@@ -2,16 +2,31 @@ import { balanceOf } from './wallet.js';
 
 const PAGE_SIZE = 20;
 
-// 总资产 = 钱包余额 + 所有桌上 stack（带入/离桌只是内部转移，不改变总资产）。
-function assetsList(db, rooms) {
+export function hasMahjongTable(db, name) {
+  return Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name));
+}
+
+// 尚未退款的离桌玩家仍持有筹码；麻将托管座位从 SQLite 读取，练习筹码不计入。
+export function tableAssets(db, rooms) {
   const stacks = new Map();
   for (const room of rooms.values()) {
     if (room.practice) continue; // 练习筹码不计入总资产与排行榜
     for (const p of room.players) {
-      if (!p.accountId || p.departing) continue;
+      if (!p.accountId) continue;
       stacks.set(p.accountId, (stacks.get(p.accountId) ?? 0) + p.stack);
     }
   }
+  if (hasMahjongTable(db, 'mahjong_seats')) {
+    for (const row of db.prepare(`SELECT account_id, SUM(stack) AS stack FROM mahjong_seats
+        WHERE closed = 0 AND practice = 0 GROUP BY account_id`).all()) {
+      stacks.set(row.account_id, (stacks.get(row.account_id) ?? 0) + row.stack);
+    }
+  }
+  return stacks;
+}
+
+function assetsList(db, rooms) {
+  const stacks = tableAssets(db, rooms);
   const rows = db.prepare(`SELECT w.account_id AS id, a.name, w.balance
                            FROM wallets w JOIN accounts a ON a.id = w.account_id`).all();
   return rows
@@ -34,6 +49,10 @@ export function overview(db, rooms, accountId) {
       FROM hand_players WHERE account_id = ?`).get(accountId);
   const slot = db.prepare(`SELECT COUNT(*) AS spins, COALESCE(SUM(net), 0) AS net
       FROM spins WHERE account_id = ?`).get(accountId);
+  const mahjong = hasMahjongTable(db, 'mahjong_round_players')
+    ? db.prepare(`SELECT COUNT(*) AS rounds, COALESCE(SUM(net), 0) AS net,
+        COALESCE(SUM(wins), 0) AS wins FROM mahjong_round_players WHERE account_id = ?`).get(accountId)
+    : { rounds: 0, net: 0, wins: 0 };
   return {
     balance: balanceOf(db, accountId),
     tableStack,
@@ -41,13 +60,15 @@ export function overview(db, rooms, accountId) {
     rank: mine ? 1 + assets.filter(entry => entry.total > mine.total).length : null,
     totalPlayers: assets.length,
     handsPlayed: aggregate.hands,
-    // 总盈亏 = 德州净盈亏 + 老虎机净盈亏（总资产口径不变：balance + 桌上筹码）。
-    netProfit: aggregate.net + slot.net,
+    netProfit: aggregate.net + slot.net + mahjong.net,
     // 胜率口径：盈利手数 / 总局数（无论摊牌获胜还是对手弃牌获胜都计入）
     winRate: aggregate.hands ? aggregate.winning / aggregate.hands : 0,
     // 老虎机战绩单列：次数与累计净盈亏。
     slotSpins: slot.spins,
     slotNet: slot.net,
+    mahjongRounds: mahjong.rounds,
+    mahjongNet: mahjong.net,
+    mahjongHuCount: mahjong.wins,
   };
 }
 

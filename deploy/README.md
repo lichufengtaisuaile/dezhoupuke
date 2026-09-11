@@ -1,8 +1,11 @@
 # Linux Deployment Without Docker
 
 The game runs as a single Node.js process. Use Node.js 20 or newer and install
-dependencies with `npm ci --omit=dev`. Rooms and chips live in memory; restarting
-or updating the service clears them. Schedule updates when the lobby is empty.
+dependencies with `npm ci --omit=dev`. Accounts, wallets, history and room
+snapshots are stored in SQLite. Keep `data/dezhou.db` and its WAL files in the
+persistent data directory across releases; the current unit permits writes to
+`/home/admin/dezhou-data`, exposed to the application through its `data` path.
+Schedule updates when the lobby is empty and retain a database backup.
 
 `serve.js` is the managed-service entry point. It listens on `HOST` (default
 `127.0.0.1`) and `PORT` (default `3210`), and exits if that port is unavailable.
@@ -33,8 +36,13 @@ curl --fail http://127.0.0.1:3210/api/health
 
 To update, prepare a separate release, install dependencies, and validate it
 before changing `/home/admin/dezhou-current` and restarting the service. Retain
-the prior release so the symlink can be restored if needed. Game sessions cannot
-be preserved across a restart with the current in-memory storage.
+the prior release so the symlink can be restored if needed. Preserve the shared
+database when changing application releases. Poker restores seats and chips after
+an unexpected restart but voids an unfinished hand; a graceful poker shutdown
+refunds table chips. Mahjong saves its full wall, hands, responses and settlements,
+so an unfinished round resumes after either kind of restart. Returning Mahjong
+players receive a normal turn window (20 seconds by default) before unattended
+play continues; offline seats in a waiting or completed room are refunded.
 
 ## Public Access
 

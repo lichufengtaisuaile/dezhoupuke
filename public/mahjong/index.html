@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#154e43" />
+  <meta name="description" content="同桌血流红中，四人麻将、连续胡牌，与朋友一起坐一桌。" />
+  <title>血流红中 · 同桌</title>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/lobby.css" />
+  <link rel="stylesheet" href="/account.css" />
+  <link rel="stylesheet" href="/mahjong/style.css" />
+  <link rel="stylesheet" href="/mahjong/effects.css" />
+</head>
+<body class="mj-page">
+  <div class="mj-shell">
+    <header class="mj-header">
+      <a class="mj-brand" href="/#/" aria-label="返回同桌大厅"><span class="mj-brand-tile" aria-hidden="true"><svg class="mj-tile-face" viewBox="0 0 60 80" focusable="false"><use href="/mahjong/tile-faces.svg#z0" /></svg></span><span><strong>同桌</strong><small>血流红中</small></span></a>
+      <div class="mj-header-actions"><div class="topbar-identity" id="mj-identity"></div><button class="icon-button" type="button" data-open-rules title="玩法规则" aria-label="玩法规则"><i data-lucide="book-open"></i></button></div>
+    </header>
+
+    <main id="mj-lobby" class="mj-lobby">
+      <section class="mj-hero">
+        <div class="mj-hero-copy"><span class="mj-eyebrow">四个人，一直胡到最后</span><h1>血流红中</h1><p>红中作赖子，胡牌不停局。<br />叫上朋友，把好运摸进手里。</p><div class="mj-hero-buttons"><button class="button primary" type="button" id="mj-create-open"><i data-lucide="plus"></i>创建房间</button><button class="button secondary" type="button" id="mj-join-open"><i data-lucide="hash"></i>房号加入</button></div><div class="mj-hero-tags"><span>4 人对局</span><span>红中赖子</span><span>一炮多响</span><span>16 倍封顶</span></div></div>
+        <div class="mj-hero-art" aria-hidden="true"><span class="mj-art-tile mj-art-left"><svg class="mj-tile-face" viewBox="0 0 60 80" focusable="false"><use href="/mahjong/tile-faces.svg#m7" /></svg></span><span class="mj-art-tile mj-art-center"><svg class="mj-tile-face" viewBox="0 0 60 80" focusable="false"><use href="/mahjong/tile-faces.svg#z0" /></svg></span><span class="mj-art-tile mj-art-right"><svg class="mj-tile-face" viewBox="0 0 60 80" focusable="false"><use href="/mahjong/tile-faces.svg#p5" /></svg></span><span class="mj-art-caption">好牌 · 好友 · 同桌</span></div>
+      </section>
+      <div id="mj-resume" class="mj-resume" hidden><div><strong>你有一桌正在进行</strong><span id="mj-resume-code"></span></div><button type="button" class="button primary" id="mj-resume-button">返回牌桌</button></div>
+      <section class="mj-rooms" aria-labelledby="mj-rooms-title"><div class="mj-section-heading"><div><h2 id="mj-rooms-title">找一桌，坐下来</h2><p>正式桌使用钱包筹码，练习桌独立计分。</p></div><button class="icon-button bordered" type="button" id="mj-refresh" title="刷新房间" aria-label="刷新房间"><i data-lucide="refresh-cw"></i></button></div><div class="mj-room-list" id="mj-room-list" aria-live="polite"><p class="mj-empty">正在寻找牌桌…</p></div></section>
+      <a class="mj-portal-link" href="/#/"><i data-lucide="arrow-left"></i>返回游戏大厅</a>
+    </main>
+
+    <main id="mj-game" class="mj-game" hidden>
+      <div class="mj-game-bar"><div class="mj-room-heading"><strong id="mj-room-code"></strong><span id="mj-room-type" class="mj-badge"></span><span id="mj-room-base"></span></div><div class="mj-game-tools"><button type="button" class="mj-tool" id="mj-copy-room" title="复制邀请链接" aria-label="复制邀请链接"><i data-lucide="link"></i><span>邀请</span></button><button type="button" class="mj-tool" id="mj-ledger-open" aria-label="本局账单"><i data-lucide="receipt-text"></i><span>本局账单</span></button><button type="button" class="mj-tool" id="mj-leave-open" aria-label="离桌"><i data-lucide="log-out"></i><span>离桌</span></button></div></div>
+      <section class="mj-table" aria-label="麻将牌桌">
+        <div class="mj-table-rim" aria-hidden="true"></div>
+        <div id="mj-opponents"></div>
+        <div id="mj-rivers" class="mj-rivers" aria-label="各家弃牌"></div>
+        <div class="mj-table-center"><span class="mj-center-title">血流红中</span><strong id="mj-wall">等待入座</strong><span id="mj-round-hint">四位玩家准备后开始</span><div id="mj-last-discard" class="mj-last-discard"></div></div>
+        <div class="mj-event-banner" id="mj-event-banner" role="status" hidden></div>
+        <div class="mj-round-result" id="mj-round-result" hidden></div>
+        <div class="mj-ready-panel" id="mj-ready-panel"><p id="mj-ready-hint">邀请朋友加入，四人准备后开局</p><button class="button primary" id="mj-ready" type="button">准备</button></div>
+      </section>
+      <section class="mj-hand-area" aria-label="我的手牌与操作">
+        <div class="mj-hand-heading"><div id="mj-self-info"></div><div class="mj-turn-prompt"><span id="mj-turn-label"></span><span id="mj-countdown" aria-label="操作剩余秒数"></span></div></div>
+        <div class="mj-action-row" id="mj-actions" aria-label="可选操作"></div>
+        <div class="mj-hand-scroll" id="mj-hand-scroll"><div id="mj-self-melds" class="mj-self-melds"></div><div class="mj-hand" id="mj-hand" role="group" aria-label="手牌，点选后再次点击出牌"></div></div>
+        <div class="mj-hand-foot"><span id="mj-hand-help">点选一张牌，再点一次打出</span><span>红中赖子 · 不换三张 · 不定缺</span></div>
+      </section>
+    </main>
+  </div>
+
+  <dialog class="home-dialog mj-dialog" id="mj-create-dialog" aria-labelledby="mj-create-title">
+    <div class="home-dialog-heading"><h2 id="mj-create-title">创建血流红中房间</h2><button class="icon-button" type="button" data-close aria-label="关闭"><i data-lucide="x"></i></button></div>
+    <form id="mj-create-form" class="home-dialog-form">
+      <label for="mj-base">底分</label><select id="mj-base" name="base"><option value="10">10 筹码</option><option value="50">50 筹码</option><option value="100">100 筹码</option></select>
+      <label for="mj-buyin">带入筹码</label><select id="mj-buyin" name="buyIn"><option value="1000">1,000</option><option value="2000" selected>2,000</option><option value="5000">5,000</option><option value="10000">10,000</option></select>
+      <label class="mj-checkbox"><input type="checkbox" name="practice" id="mj-practice" />练习桌：使用独立练习筹码</label>
+      <p id="mj-buyin-hint" class="mj-dialog-note">带入筹码从钱包扣除，离桌时退回剩余筹码。</p>
+      <p class="mj-dialog-note">16 倍封顶 · 不换三张、不定缺<br />胡后继续打，牌墙摸完结束。<button type="button" class="mj-inline-link" data-open-rules>完整规则</button></p>
+      <p data-form-error class="home-dialog-error" role="alert" hidden></p><button class="button primary full" type="submit">创建并入座</button>
+    </form>
+  </dialog>
+  <dialog class="home-dialog mj-dialog" id="mj-join-dialog" aria-labelledby="mj-join-title"><div class="home-dialog-heading"><h2 id="mj-join-title">房号加入</h2><button class="icon-button" type="button" data-close aria-label="关闭"><i data-lucide="x"></i></button></div><form id="mj-join-form" class="home-dialog-form"><label for="mj-join-code">房间号</label><input id="mj-join-code" name="code" maxlength="12" placeholder="输入朋友的房间号" autocomplete="off" autocapitalize="characters" required /><p id="mj-join-preview" class="mj-dialog-note">先查看规则与带入金额，再确认入座。</p><p data-form-error class="home-dialog-error" role="alert" hidden></p><button type="submit" class="button primary full" id="mj-join-submit">查看房间</button></form></dialog>
+  <dialog class="home-dialog mj-dialog mj-rules-dialog" id="mj-rules-dialog" aria-labelledby="mj-rules-title">
+    <div class="home-dialog-heading"><h2 id="mj-rules-title">血流红中 · 本桌规则</h2><button class="icon-button" type="button" data-close aria-label="关闭"><i data-lucide="x"></i></button></div>
+    <div class="mj-rules-content"><p class="mj-rules-lead">红中作赖子，胡牌后继续参与，直到牌墙摸完。</p><dl>
+      <dt>牌组与开局</dt><dd>万、筒、条各 36 张，加 4 张红中，共 112 张。四人对局，不换三张、不定缺、不吃牌。</dd>
+      <dt>红中</dt><dd>红中在组成胡牌时充当赖子，不能碰或杠。可以打出，也可以被别人用来胡牌。</dd>
+      <dt>碰、杠、胡</dt><dd>支持碰、明杠、暗杠、补杠和抢补杠胡。支持一炮多响，胡牌优先于碰杠；自摸胡后仍需出牌。</dd>
+      <dt>胡牌与倍数</dt><dd>平胡 1 倍、对对胡 2 倍、七对 4 倍；清一色在此基础上乘 4，最高 16 倍。自摸、杠上花和抢杠胡不额外加倍，最终以本局账单列出的牌型和倍数为准。</dd>
+      <dt>谁付筹码</dt><dd>点炮由出牌者向每位赢家支付；自摸由其余三家分别支付。每家应付为底分 × 胡牌倍数。</dd>
+      <dt>杠牌计分</dt><dd>明杠由出牌者付 2 倍底分；暗杠其余三家各付 2 倍；补杠其余三家各付 1 倍。抢补杠胡时不收补杠分。</dd>
+      <dt>一局结束</dt><dd>牌墙摸完结束，不查叫、不查花猪、不退杠分。筹码不足时最多赔到 0，多人收分按应收比例分配；有玩家筹码归零后结束本局。</dd>
+      <dt>断线与离桌</dt><dd>超时进入托管；重新连接后点击「接管」恢复操作。对局中离桌会在本局结束后退回剩余筹码。</dd>
+    </dl></div>
+  </dialog>
+  <dialog class="home-dialog mj-dialog mj-ledger-dialog" id="mj-ledger-dialog" aria-labelledby="mj-ledger-title"><div class="home-dialog-heading"><h2 id="mj-ledger-title">本局账单</h2><button class="icon-button" type="button" data-close aria-label="关闭"><i data-lucide="x"></i></button></div><div id="mj-ledger-content"></div></dialog>
+  <dialog class="home-dialog mj-dialog" id="mj-gang-dialog" aria-labelledby="mj-gang-title"><div class="home-dialog-heading"><h2 id="mj-gang-title">选择要杠的牌</h2><button class="icon-button" type="button" data-close aria-label="关闭"><i data-lucide="x"></i></button></div><div class="mj-gang-options" id="mj-gang-options"></div></dialog>
+  <dialog class="home-dialog mj-dialog" id="mj-leave-dialog" aria-labelledby="mj-leave-title"><div class="home-dialog-heading"><h2 id="mj-leave-title">离开牌桌</h2><button class="icon-button" type="button" data-close aria-label="关闭"><i data-lucide="x"></i></button></div><p id="mj-leave-note" class="mj-dialog-note"></p><div class="mj-dialog-buttons"><button type="button" class="button secondary" data-close>继续玩</button><button type="button" class="button primary" id="mj-leave-confirm">确认离桌</button></div></dialog>
+  <div class="mj-toast" id="mj-toast" role="status" hidden></div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/vendor/lucide.js"></script>
+  <script src="/account.js"></script>
+  <script src="/mahjong/effects.js"></script>
+  <script src="/mahjong/app.js"></script>
+</body>
+</html>

@@ -202,6 +202,11 @@ test('banned NPC is kicked from the table and never reseated', async (t) => {
   const server = await createPokerServer(fastOptions({ npcTables: 1 }));
   t.after(async () => { await server.close(); });
   const code = npc.NPC_TABLE_CODES[0];
+  // 本用例验证封禁与座位自愈；真人不会打牌，因此不要让自动下一手
+  // 抢在自愈之前发给真人，导致移座等待 30 秒行动超时而超出测试期限。
+  const room = server.rooms.get(code);
+  room.autoNext = false;
+  await poll('npc hand settles before moderation', () => room.phase !== 'playing');
   const victim = npcPlayers(server, code)[0];
   const ban = await api(server.port, 'POST', `/api/admin/users/${victim.accountId}/ban`, { body: { banned: true }, token: ADMIN_TOKEN });
   assert.equal(ban.status, 200);
@@ -213,7 +218,8 @@ test('banned NPC is kicked from the table and never reseated', async (t) => {
   await api(server.port, 'POST', `/api/admin/users/${victim.accountId}/ban`, { body: { banned: false }, token: ADMIN_TOKEN });
   const guest = await register(server.port, '过客丁');
   const client = await connectOk(server.port, guest.token);
-  await request(client, 'room:join', { code });
+  const joined = await request(client, 'room:join', { code });
+  assert.equal(joined.ok, true, joined.error);
   await poll('npc count drops after human joins', () => npcPlayers(server, code).length === 4);
   await request(client, 'room:leave', {});
   await poll('unbanned npc reseated when a seat frees', () =>

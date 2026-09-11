@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS wallets (
 CREATE TABLE IF NOT EXISTS ledger (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   account_id TEXT NOT NULL REFERENCES accounts(id),
-  type TEXT NOT NULL CHECK (type IN ('REGISTER_GRANT', 'SUBSIDY', 'BRING_IN', 'CASH_OUT', 'HAND_WIN', 'PRACTICE', 'SLOT_BET', 'SLOT_WIN', 'ADMIN_ADJUST')),
+  type TEXT NOT NULL CHECK (type IN ('REGISTER_GRANT', 'SUBSIDY', 'BRING_IN', 'CASH_OUT', 'HAND_WIN', 'PRACTICE', 'SLOT_BET', 'SLOT_WIN', 'ADMIN_ADJUST', 'MAHJONG_SETTLE')),
   amount INTEGER NOT NULL,
   balance_after INTEGER NOT NULL,
   ref_type TEXT,
@@ -135,7 +135,7 @@ function migrateAccounts(db) {
 // SQLite 不能修改 CHECK 约束：凡是 ledger.type 的 CHECK 不含最新类型集合的库
 // （最早六种、加老虎机后的八种）都按"建新表 → 按列名拷贝 → 删旧表 → 改名"重建，数据无损。
 // 注意：ledger 各历史版本的列集相同，按列名拷贝即可；外键约束临时关闭。
-const LEDGER_TYPES = ['REGISTER_GRANT', 'SUBSIDY', 'BRING_IN', 'CASH_OUT', 'HAND_WIN', 'PRACTICE', 'SLOT_BET', 'SLOT_WIN', 'ADMIN_ADJUST'];
+const LEDGER_TYPES = ['REGISTER_GRANT', 'SUBSIDY', 'BRING_IN', 'CASH_OUT', 'HAND_WIN', 'PRACTICE', 'SLOT_BET', 'SLOT_WIN', 'ADMIN_ADJUST', 'MAHJONG_SETTLE'];
 
 function migrateLedger(db) {
   const table = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'ledger'").get();

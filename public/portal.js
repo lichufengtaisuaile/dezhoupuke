@@ -18,11 +18,11 @@
       available: true,
     },
     {
-      id: "chuanchuan",
-      name: "川麻",
+      id: "mahjong",
+      name: "血流红中",
       icon: "dices",
-      description: "四川麻将换三张，血战到底",
-      available: false,
+      description: "四人四川麻将，红中赖子、胡后继续，支持电脑陪练",
+      available: true,
     },
     {
       id: "kawuxing",
@@ -73,7 +73,7 @@
         return `<button type="button" class="portal-game" data-game="${esc(game.id)}" aria-label="进入${esc(game.name)}">
           <div class="portal-game-icon">${icon(game.icon)}</div>
           <div class="portal-game-info"><h2>${esc(game.name)}</h2><p>${esc(game.description)}</p>
-            <span class="portal-game-online" data-portal="holdem-online" ${online === null ? "hidden" : ""}></span>
+            ${game.id === "holdem" ? `<span class="portal-game-online" data-portal="holdem-online" ${online === null ? "hidden" : ""}></span>` : ""}
           </div>
           <span class="portal-game-go">${icon("chevron-right")}</span>
         </button>`;
@@ -99,10 +99,10 @@
       }
       get("tables-count").textContent = `${tables.length} 桌`;
       get("table-list").innerHTML = tables.map((table) => `
-        <button type="button" class="portal-table" data-table-code="${esc(table.code)}">
+        <button type="button" class="portal-table" data-table-code="${esc(table.code)}" data-table-game="${esc(table.game || 'holdem')}">
           <span class="portal-table-main">
             <strong>#${esc(table.code)}</strong>
-            <span class="portal-table-meta">盲注 ${number(table.smallBlind)} / ${number(table.bigBlind)}${table.practice ? ' · <b class="portal-table-practice">练习桌</b>' : ""}</span>
+            <span class="portal-table-meta">${table.game === 'mahjong' ? `血流红中 · 底分 ${number(table.base)}` : `德州 · 盲注 ${number(table.smallBlind)} / ${number(table.bigBlind)}`}${table.practice ? ' · <b class="portal-table-practice">练习桌</b>' : ""}</span>
           </span>
           <span class="portal-table-state${table.playing ? " is-playing" : ""}">${table.playing ? "对局中" : "等待中"}</span>
           <span class="portal-table-stack">${icon("coins")}桌上 ${number(table.myStack)}</span>
@@ -117,7 +117,7 @@
     });
     get("table-list").addEventListener("click", (event) => {
       const item = event.target.closest("[data-table-code]");
-      if (item && onReturnToTable) onReturnToTable(item.dataset.tableCode);
+      if (item && onReturnToTable) onReturnToTable(item.dataset.tableCode, item.dataset.tableGame);
     });
 
     renderGames();

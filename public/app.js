@@ -84,6 +84,10 @@
   const portal = window.createPortal({
     root: $("portal-view"),
     onEnterGame: async (id) => {
+      if (id === "mahjong") {
+        location.assign("/mahjong/");
+        return;
+      }
       if (id === "slots") {
         location.assign("/slot/");
         return;
@@ -92,7 +96,10 @@
       if (!(await requireAuth())) return;
       location.hash = "#/holdem";
     },
-    onReturnToTable: (code) => { returnToTable(code); },
+    onReturnToTable: (code, game) => {
+      if (game === "mahjong") location.assign(`/mahjong/?room=${encodeURIComponent(code)}`);
+      else returnToTable(code);
+    },
   });
   const topbar = window.createTopbar({
     mount: $("topbar-identity"),

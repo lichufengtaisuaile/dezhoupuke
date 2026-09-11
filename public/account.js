@@ -12,6 +12,8 @@
     PRACTICE: "练习筹码",
     SLOT_BET: "老虎机下注",
     SLOT_WIN: "老虎机派奖",
+    MAHJONG_SETTLE: "麻将桌内输赢",
+    ADMIN_ADJUST: "管理员调整",
   };
   const TRANSFER_TYPES = new Set(["BRING_IN", "CASH_OUT"]);
   const suitSymbols = { spades: "♠", hearts: "♥", diamonds: "♦", clubs: "♣" };
@@ -95,6 +97,11 @@
       netProfit: data.netProfit ?? 0,
       handsPlayed: data.handsPlayed ?? 0,
       winRate: data.winRate ?? 0,
+      slotSpins: data.slotSpins ?? 0,
+      slotNet: data.slotNet ?? 0,
+      mahjongRounds: data.mahjongRounds ?? 0,
+      mahjongNet: data.mahjongNet ?? 0,
+      mahjongHuCount: data.mahjongHuCount ?? 0,
     };
   }
 
@@ -241,6 +248,7 @@
   const handsState = { items: [], page: 0, hasMore: false, loading: false };
   const ledgerState = { items: [], page: 0, hasMore: false, loading: false };
   const slotsState = { items: [], page: 0, hasMore: false, loading: false };
+  const mahjongState = { items: [], page: 0, hasMore: false, loading: false };
 
   function buildProfileDom() {
     if (drawer) return;
@@ -260,14 +268,16 @@
       <div class="profile-account" data-profile-head></div>
       <div class="profile-tabs" role="group" aria-label="个人中心页签">
         <button type="button" data-profile-tab="overview" aria-pressed="true">总览</button>
-        <button type="button" data-profile-tab="hands" aria-pressed="false">牌局记录</button>
+        <button type="button" data-profile-tab="hands" aria-pressed="false">德州</button>
         <button type="button" data-profile-tab="slots" aria-pressed="false">老虎机</button>
+        <button type="button" data-profile-tab="mahjong" aria-pressed="false">麻将</button>
         <button type="button" data-profile-tab="ledger" aria-pressed="false">筹码明细</button>
       </div>
       <div class="profile-body">
         <section data-profile-panel="overview" class="profile-panel"></section>
         <section data-profile-panel="hands" class="profile-panel" hidden></section>
         <section data-profile-panel="slots" class="profile-panel" hidden></section>
+        <section data-profile-panel="mahjong" class="profile-panel" hidden></section>
         <section data-profile-panel="ledger" class="profile-panel" hidden></section>
       </div>`;
     document.body.append(backdrop, drawer);
@@ -286,6 +296,7 @@
       if (more && !more.disabled) {
         if (more.dataset.profileMore === "hands") loadHands(false);
         else if (more.dataset.profileMore === "slots") loadSlots(false);
+        else if (more.dataset.profileMore === "mahjong") loadMahjong(false);
         else loadLedger(false);
       }
     });
@@ -321,6 +332,7 @@
     if (tab === "overview") loadOverview(force);
     else if (tab === "hands") loadHands(true);
     else if (tab === "slots") loadSlots(true);
+    else if (tab === "mahjong") loadMahjong(true);
     else loadLedger(true);
   }
 
@@ -369,10 +381,12 @@
         <div><span>总资产</span><strong>${money(data.totalAssets)}</strong></div>
         <div><span>财富排名</span><strong>${rank}</strong></div>
         <div><span>累计净盈亏</span><strong class="${net > 0 ? "pos" : net < 0 ? "neg" : ""}">${net === 0 ? "0" : signedMoney(net)}</strong></div>
-        <div><span>总手数</span><strong>${money(data.handsPlayed)}</strong></div>
-        <div><span>胜率</span><strong>${winRate}</strong></div>
+        <div><span>德州手数</span><strong>${money(data.handsPlayed)}</strong></div>
+        <div><span>德州盈利手数占比</span><strong>${winRate}</strong></div>
         <div><span>老虎机次数</span><strong>${money(data.slotSpins ?? 0)}</strong></div>
         <div><span>老虎机净盈亏</span><strong class="${Number(data.slotNet || 0) > 0 ? "pos" : Number(data.slotNet || 0) < 0 ? "neg" : ""}">${Number(data.slotNet || 0) === 0 ? "0" : signedMoney(Number(data.slotNet || 0))}</strong></div>
+        <div><span>麻将局数 / 胡牌次数</span><strong>${money(data.mahjongRounds)} / ${money(data.mahjongHuCount)}</strong></div>
+        <div><span>麻将净盈亏</span><strong class="${Number(data.mahjongNet || 0) > 0 ? "pos" : Number(data.mahjongNet || 0) < 0 ? "neg" : ""}">${Number(data.mahjongNet || 0) === 0 ? "0" : signedMoney(data.mahjongNet)}</strong></div>
       </div>
       ${Number(data.totalAssets) < SUBSIDY_THRESHOLD
         ? `<button type="button" class="button secondary full profile-subsidy" data-profile-subsidy><i data-lucide="gift"></i>领取每日补助 2,000 筹码</button>`
@@ -488,6 +502,85 @@
     icons();
   }
 
+  async function loadMahjong(reset) {
+    const panel = drawer.querySelector('[data-profile-panel="mahjong"]');
+    if (mahjongState.loading) return;
+    if (reset) {
+      mahjongState.items = [];
+      mahjongState.page = 0;
+      mahjongState.hasMore = false;
+    }
+    mahjongState.loading = true;
+    const token = get()?.token;
+    if (!mahjongState.items.length) panel.innerHTML = '<p class="profile-empty">正在加载麻将战绩…</p>';
+    try {
+      const data = await api(`/api/me/mahjong?page=${mahjongState.page + 1}`);
+      if (get()?.token !== token) return;
+      mahjongState.page = data.page || mahjongState.page + 1;
+      mahjongState.hasMore = mahjongState.page * (data.pageSize || 20) < (data.total ?? 0);
+      mahjongState.items = mahjongState.items.concat(data.rounds || []);
+      renderMahjong(panel);
+    } catch (error) {
+      panel.innerHTML = `<p class="profile-empty">${esc(error?.error || "加载失败，请稍后重试")}</p>`;
+    } finally {
+      mahjongState.loading = false;
+    }
+  }
+
+  function mahjongTileLabel(tile) {
+    if (tile === "z0") return "红中";
+    const match = /^([mps])([1-9])$/.exec(String(tile));
+    return match ? `${match[2]}${({ m: "万", p: "筒", s: "条" })[match[1]]}` : "牌";
+  }
+
+  function mahjongTiles(tiles) {
+    return `<span class="profile-mahjong-tiles" aria-label="公开胡牌">${tiles.map((tile) => {
+      const face = /^(?:[mps][1-9]|z0)$/.test(tile) ? tile : "back";
+      return `<span class="profile-mahjong-tile" role="img" aria-label="${esc(mahjongTileLabel(tile))}" title="${esc(mahjongTileLabel(tile))}"><svg viewBox="0 0 60 80" aria-hidden="true" focusable="false"><use href="/mahjong/tile-faces.svg#${face}" /></svg></span>`;
+    }).join("")}</span>`;
+  }
+
+  function renderMahjong(panel) {
+    const items = mahjongState.items;
+    const signed = (value) => Number(value) === 0 ? "0" : signedMoney(value);
+    const netClass = (value) => Number(value) > 0 ? "pos" : Number(value) < 0 ? "neg" : "";
+    panel.innerHTML = items.length ? `
+      <p class="profile-hand-meta">每局结束后收录战绩；练习桌不计入。胡牌、杠牌的即时输赢可在筹码明细查看。</p>
+      <ul class="profile-list">${items.map((round) => {
+        const participants = Array.isArray(round.players) ? round.players : [];
+        const events = Array.isArray(round.events) ? round.events : [];
+        const playerName = (seat) => participants.find((entry) => entry.seat === seat)?.name || `${Number(seat) + 1} 号位`;
+        return `<li class="profile-mahjong-round">
+          <div class="profile-hand-top">
+            <time>${esc(fmtTime(round.time))}</time>
+            <span class="profile-hand-room">#${esc(round.roomCode)} · 第 ${money(round.roundNumber)} 局</span>
+            <strong class="profile-net ${netClass(round.net)}">${signed(round.net)}</strong>
+          </div>
+          <p class="profile-hand-meta">底分 ${money(round.base)} · 胡牌 ${money(round.wins)} 次 · ${round.reason === "bankrupt" ? "有玩家筹码不足，本局结束" : "本局已结束"}<br>桌上筹码 ${money(round.startingStack)} → ${money(round.endingStack)}</p>
+          <details class="profile-mahjong-details">
+            <summary>查看 ${money(events.length)} 笔胡牌 / 杠牌结算</summary>
+            <ul class="profile-mahjong-scores">${participants.map((entry) => `<li><span>${esc(entry.name)}${entry.seat === round.mySeat ? "（你）" : ""} · 胡 ${money(entry.wins)} 次</span><strong class="${netClass(entry.net)}">${signed(entry.net)}</strong></li>`).join("")}</ul>
+            ${events.length ? `<ol class="profile-mahjong-events">${events.map((event, index) => {
+              const ownDelta = (event.changes || []).find((entry) => entry.seat === round.mySeat)?.delta ?? 0;
+              const winners = Array.isArray(event.winners) ? event.winners : [];
+              const gangName = ({ concealedGang: "暗杠", exposedGang: "直杠", addedGang: "补杠", addGang: "补杠", discardGang: "直杠" })[event.gangKind] || "杠牌";
+              const actorSeat = event.seat ?? (event.changes || []).find((entry) => entry.delta > 0)?.seat ?? event.sourceSeat;
+              const title = event.kind === "hu" ? `${event.selfDraw ? "自摸" : "点炮胡"}${winners.length > 1 ? " · 一炮多响" : ""}` : `${playerName(actorSeat)} · ${gangName}`;
+              return `<li><div class="profile-mahjong-event-top"><span>${index + 1}. ${esc(title)}</span><strong class="${netClass(ownDelta)}">你 ${signed(ownDelta)}</strong></div>
+                ${event.kind === "hu" && !event.selfDraw ? `<p>点炮：${esc(playerName(event.sourceSeat))}</p>` : ""}
+                ${winners.map((winner) => `<p>${esc(winner.name || playerName(winner.seat))} · ${esc((winner.patterns || winner.hand?.patterns || []).join(" · ") || winner.hand?.name || "胡牌")} · ${money(winner.multiplier ?? winner.hand?.multiplier ?? 1)} 倍</p>${mahjongTiles(winner.hand?.tiles || winner.tiles || [])}`).join("")}
+                ${event.kind === "gang" && event.tile ? `<p>${esc(mahjongTileLabel(event.tile))}</p>` : ""}
+                <p>${(event.changes || []).filter((entry) => entry.delta !== 0).map((entry) => `${esc(playerName(entry.seat))} ${signed(entry.delta)}`).join(" · ")}</p>
+              </li>`;
+            }).join("")}</ol>` : '<p class="profile-hand-meta">本局没有胡牌或杠牌结算</p>'}
+          </details>
+        </li>`;
+      }).join("")}</ul>
+      ${mahjongState.hasMore ? '<button type="button" class="button secondary full profile-more" data-profile-more="mahjong"><i data-lucide="chevrons-down"></i>加载更多</button>' : ""}`
+      : '<p class="profile-empty">还没有麻将战绩，完成一局正式血流红中后会记录在这里</p>';
+    icons();
+  }
+
   async function loadLedger(reset) {
     const panel = drawer.querySelector('[data-profile-panel="ledger"]');
     if (ledgerState.loading) return;
@@ -520,14 +613,16 @@
       <ul class="profile-list">${items.map((entry) => {
         const amount = Number(entry.amount || 0);
         const transfer = TRANSFER_TYPES.has(entry.type);
+        const tableMemo = entry.type === "MAHJONG_SETTLE" || entry.type === "HAND_WIN";
         return `<li class="profile-ledger">
           <div class="profile-ledger-main">
             <span class="profile-ledger-type${transfer ? " is-transfer" : ""}">${esc(LEDGER_TYPES[entry.type] || entry.type)}</span>
             <time>${esc(fmtTime(entry.createdAt ?? entry.time))}</time>
+            ${tableMemo ? '<span class="profile-ledger-note">输赢发生在桌上，未重复增减钱包</span>' : ""}
           </div>
           <div class="profile-ledger-side">
             <strong class="${amount > 0 ? "pos" : amount < 0 ? "neg" : ""}">${amount === 0 ? "0" : signedMoney(amount)}</strong>
-            <span class="profile-ledger-after">余额 ${money(entry.balanceAfter)}</span>
+            <span class="profile-ledger-after">${tableMemo ? "当时可用" : "余额"} ${money(entry.balanceAfter)}</span>
           </div>
         </li>`;
       }).join("")}</ul>
@@ -537,9 +632,12 @@
   }
 
   window.addEventListener("tongzhuo:balance", () => {
+    boardEntries = null;
     if (!isProfileOpen()) return;
     if (profileTab === "overview") loadOverview(true);
     if (profileTab === "slots") loadSlots(true);
+    if (profileTab === "mahjong") loadMahjong(true);
+    if (profileTab === "ledger") loadLedger(true);
     renderHead();
   });
 

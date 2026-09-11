@@ -733,16 +733,8 @@
     }
   }
 
-  function selectedBotDifficulty() {
-    return document.querySelector("#bot-difficulty button.active")?.dataset.difficulty ?? "normal";
-  }
-  document.querySelectorAll("#bot-difficulty button").forEach((button) => {
-    button.addEventListener("click", () => {
-      document.querySelectorAll("#bot-difficulty button").forEach((peer) => peer.classList.toggle("active", peer === button));
-    });
-  });
   $("bot-button").addEventListener("click", async () => {
-    await exclusive("room:bot", { difficulty: selectedBotDifficulty() });
+    await exclusive("room:bot", {});
     renderRoom();
     icons();
   });

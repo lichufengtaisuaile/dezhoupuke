@@ -743,6 +743,16 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       for (const room of rooms.values()) {
         if (room.npcTable && !activeCodes.has(room.code)) retireNpcRoom(room.code);
       }
+      // 后台补助：没坐在任何氛围桌上的 NPC，钱包低于补助线时按真人同规则尝试领每日
+      // 补助（subsidy 表幂等，每日一次），有钱后由入座逻辑接回桌上——否则破产即永久
+      // 离池（补助只在坐着时才发，下去就再也上不来）。
+      for (const entry of npcAccounts) {
+        const seatedSomewhere = [...rooms.values()].some(r =>
+          r.players.some(p => p.npc && p.accountId === entry.accountId && !p.departing));
+        if (seatedSomewhere) continue;
+        if (wallet.balanceOf(db, entry.accountId) >= wallet.SUBSIDY_THRESHOLD) continue;
+        try { wallet.grantSubsidy(db, entry.accountId); } catch { /* 今天领过，按规则不能再领 */ }
+      }
     } catch (error) {
       console.error('NPC heal failed:', error);
     }
@@ -759,6 +769,21 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
     }
     for (const player of [...room.players]) {
       if (player.npc && npc.isNpcBanned(db, player.accountId)) removePlayer(room, player);
+    }
+    // 先尝试资金补足：桌上低于最小带入就从钱包 BRING_IN 到目标，钱包不够先领每日补助。
+    for (const player of room.players) {
+      if (player.npc && !player.departing && player.stack < room.bigBlind * 20) npcTopUp(room, player);
+    }
+    // 破产让座：补足后仍连最小带入都凑不齐（今天补助已领过、钱包见底）的 NPC 不再占座
+    // （对局中除外，本手结束后下个巡检周期清出），把座位让给有钱的 NPC——0 分占位太假。
+    if (!isPlaying(room)) {
+      const min = room.bigBlind * 20;
+      for (const player of [...room.players]) {
+        if (player.npc && !player.departing && player.stack < min
+          && wallet.balanceOf(db, player.accountId) < min) {
+          removePlayer(room, player);
+        }
+      }
     }
     const humans = room.players.filter(p => !p.isBot && !p.departing).length;
     const target = Math.min(
@@ -789,9 +814,6 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
     const minKeep = humans ? 0 : 2;
     if (!isPlaying(room) && seatedNow.length > minKeep && randomInt(100) < NPC_CHURN_RATE) {
       removePlayer(room, seatedNow[seatedNow.length - 1]);
-    }
-    for (const player of room.players) {
-      if (player.npc && !player.departing && player.stack < room.bigBlind * 20) npcTopUp(room, player);
     }
     if (!room.players.some(p => p.id === room.hostId && !p.departing)) transferHost(room);
     if (room.players.length > 0) broadcast(room);

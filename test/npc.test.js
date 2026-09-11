@@ -201,12 +201,14 @@ test('NPC funds cycle: wallet bring-in at start, daily subsidy once per day', as
   seated.stack = 100;
   await poll('subsidy granted once and topped up', () => subsidies() === 1 && bringIns(-400) >= 2);
 
-  // 同一天再次破产：补助每日一次，不能重复领取；钱包为空也无法再带入。
+  // 同一天再次破产：补助每日一次，不能重复领取；钱包为空也补不起最小带入 →
+  // 按新规则让座离桌（桌上残码会退回钱包），也不会再产生带入。
   server.db.prepare('UPDATE wallets SET balance = 0 WHERE account_id = ?').run(accountId);
   seated.stack = 100;
-  await new Promise((resolve) => setTimeout(resolve, 600));
+  await poll('broke npc leaves the seat', () =>
+    (server.rooms.get(code).players.some((p) => p.accountId === accountId) ? null : true));
   assert.equal(subsidies(), 1, 'subsidy must be limited to once per day');
-  assert.equal(wallet.balanceOf(server.db, accountId), 0, 'without subsidy nothing may be brought in');
+  assert.equal(wallet.balanceOf(server.db, accountId), 100, 'residual table stack must be refunded, nothing brought in');
 });
 
 test('banned NPC is kicked from the table and never reseated', async (t) => {
@@ -365,4 +367,37 @@ test('deleting a config retires its live room: auto-next stops and the room is r
   assert.equal(server.rooms.has(code), false);
   // 快照也清了，重启不会再恢复
   assert.equal(server.db.prepare('SELECT COUNT(*) AS count FROM room_snapshots WHERE room_code = ?').get(code).count, 0);
+});
+
+test('broke npc with 0 stack and empty wallet leaves the seat and gets the daily subsidy', async (t) => {
+  const server = await createPokerServer(fastOptions({ npcTables: 1 }));
+  t.after(async () => { await server.close(); });
+  const code = npc.NPC_TABLE_CODES[0];
+  const room = await poll('npc table seated', () => {
+    const candidate = server.rooms.get(code);
+    return candidate && npcPlayers(server, code).length >= 4 ? candidate : null;
+  });
+  // 停在非对局窗口，避免引擎结算覆盖我们制造的破产状态
+  room.autoNext = false;
+  await poll('hand settles', () => room.phase !== 'playing');
+  const victim = npcPlayers(server, code)[0];
+  // 先占用今日补助名额，制造"补助已领过仍破产"的死局
+  const day = new Date();
+  const dayKey = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+  server.db.prepare('INSERT OR IGNORE INTO subsidies (account_id, day, created_at) VALUES (?, ?, ?)')
+    .run(victim.accountId, dayKey, Date.now());
+  server.db.prepare('UPDATE wallets SET balance = 0 WHERE account_id = ?').run(victim.accountId);
+  victim.stack = 0;
+  await poll('broke npc removed from seat', () =>
+    (server.rooms.get(code).players.some((p) => p.accountId === victim.accountId) ? null : true));
+  // 补助被占用的窗口期：钱包见底，不会被接回桌上
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  assert.ok(!server.rooms.get(code).players.some((p) => p.accountId === victim.accountId),
+    'broke npc must not be reseated while subsidy is unavailable');
+  // 解除占用（相当于到明天）：后台补助通道发放每日补助，随后被接回桌上
+  server.db.prepare('DELETE FROM subsidies WHERE account_id = ?').run(victim.accountId);
+  await poll('unseated npc gets subsidy and reseats', () => {
+    const seated = server.rooms.get(code)?.players.find((p) => p.accountId === victim.accountId);
+    return seated && seated.stack >= 200 ? seated : null;
+  });
 });

@@ -7,6 +7,28 @@ persistent data directory across releases; the current unit permits writes to
 `/home/admin/dezhou-data`, exposed to the application through its `data` path.
 Schedule updates when the lobby is empty and retain a database backup.
 
+On the current Alibaba Cloud Linux host, the packaged `better-sqlite3` Linux
+binary requires a newer glibc. Use the already installed Python 3.11 to build
+the native module locally; the system's default Python 3.6 cannot run node-gyp.
+Run this in each new release directory before starting the application:
+
+```sh
+npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+if ! node -e 'const D=require("better-sqlite3"); new D(":memory:").close()'; then
+  if [ -f node_modules/better-sqlite3/prebuilds/linux-x64.node ]; then
+    mv node_modules/better-sqlite3/prebuilds/linux-x64.node \
+      node_modules/better-sqlite3/prebuilds/linux-x64.node.disabled
+  fi
+  PYTHON=/usr/bin/python3.11 npm rebuild better-sqlite3
+fi
+node -e 'const D=require("better-sqlite3"); new D(":memory:").close()'
+```
+
+The module prefers its packaged binary even after a local build, so disable
+that incompatible binary before rebuilding. Do not change the system glibc or
+the global Python default. To run tests on the host, install with `--include=dev`
+instead of `--omit=dev`, then prune using `npm prune --omit=dev --ignore-scripts`.
+
 `serve.js` is the managed-service entry point. It listens on `HOST` (default
 `127.0.0.1`) and `PORT` (default `3210`), and exits if that port is unavailable.
 The desktop `npm start` command retains its automatic port selection.

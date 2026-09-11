@@ -148,6 +148,11 @@ test('human join lowers the NPC target; leaving refills the seat', async (t) => 
   t.after(async () => { await server.close(); });
   const code = npc.NPC_TABLE_CODES[0];
   assert.equal(npcPlayers(server, code).length, 5);
+  // 本用例只验证入座补位；避免自动下一手先发给不操作的真人，
+  // 让座位自愈等待 30 秒行动超时而超过测试期限。
+  const room = server.rooms.get(code);
+  room.autoNext = false;
+  await poll('npc hand settles before human joins', () => room.phase !== 'playing');
 
   const human = await register(server.port, '路人甲');
   const client = await connectOk(server.port, human.token);
@@ -157,7 +162,8 @@ test('human join lowers the NPC target; leaving refills the seat', async (t) => 
     && server.rooms.get(code).players.some((p) => !p.isBot));
   assert.equal(server.rooms.get(code).players.length, 5); // 4 NPC + 1 human, one seat left open
 
-  await request(client, 'room:leave', {});
+  const left = await request(client, 'room:leave', {});
+  assert.equal(left.ok, true, left.error);
   await poll('npc count refills to 5', () => npcPlayers(server, code).length === 5);
   client.socket.disconnect();
 });

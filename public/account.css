@@ -185,6 +185,13 @@
 .profile-board li.rank-1 .profile-board-rank,
 .profile-board li.rank-2 .profile-board-rank,
 .profile-board li.rank-3 .profile-board-rank { color: var(--gold); font-weight: 700; }
+.profile-board li.profile-board-gap {
+  justify-content: center;
+  padding: 2px 13px;
+  color: #5c6d63;
+  background: #ffffff03;
+}
+.profile-board li.profile-board-gap span { line-height: 1; }
 .profile-board-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .profile-board-name b { font-weight: 500; color: inherit; }
 .profile-board strong { font-variant-numeric: tabular-nums; }

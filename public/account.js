@@ -375,7 +375,15 @@
     const rank = data.rank ? `#${data.rank}${data.totalPlayers ? ` / ${data.totalPlayers}` : ""}` : "—";
     const net = Number(data.netProfit || 0);
     const winRate = `${Math.round((data.winRate || 0) * 1000) / 10}%`;
-    const rows = (boardEntries || []).slice(0, 50);
+    const rows = (boardEntries || []).slice(0, 10);
+    const selfIndex = boardEntries.findIndex((entry) => entry.name === account?.name);
+    const selfBeyond = Boolean(account) && selfIndex >= 10;
+    // 自己排在十名开外时，在第十名下面单独显示自己的名次；榜上找不到时用总览数据兜底
+    const selfRow = selfBeyond ? {
+      rank: selfIndex >= 0 ? selfIndex + 1 : (data.rank || null),
+      name: selfIndex >= 0 ? boardEntries[selfIndex].name : account.name,
+      total: selfIndex >= 0 ? boardEntries[selfIndex].total : data.totalAssets,
+    } : null;
     panel.innerHTML = `
       <div class="profile-stats">
         <div><span>总资产</span><strong>${money(data.totalAssets)}</strong></div>
@@ -397,7 +405,15 @@
           <span class="profile-board-rank">${index + 1}</span>
           <span class="profile-board-name">${esc(entry.name)}${entry.name === account?.name ? "<b>（你）</b>" : ""}</span>
           <strong>${money(entry.total)}</strong>
-        </li>`).join("")}</ol>`
+        </li>`).join("")}
+        ${selfRow ? `
+        <li class="profile-board-gap" aria-hidden="true"><span>…</span></li>
+        <li class="is-self">
+          <span class="profile-board-rank">${selfRow.rank ?? "—"}</span>
+          <span class="profile-board-name">${esc(selfRow.name)}<b>（你）</b></span>
+          <strong>${money(selfRow.total)}</strong>
+        </li>` : ""}
+      </ol>`
         : '<p class="profile-empty">暂无排行数据</p>'}`;
     icons();
   }

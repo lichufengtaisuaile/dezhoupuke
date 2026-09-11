@@ -72,12 +72,14 @@ test('startup: two resident tables, each seated with five NPCs on real accounts'
   const server = await createPokerServer(fastOptions());
   t.after(async () => { await server.close(); });
   for (const code of npc.NPC_TABLE_CODES) {
-    const room = server.rooms.get(code);
-    assert.ok(room, `room ${code} must exist`);
+    const room = await poll(`npc table ${code} seated to target`, () => {
+      const candidate = server.rooms.get(code);
+      return candidate && npcPlayers(server, code).length >= 5 ? candidate : null;
+    });
     assert.equal(room.npcTable, true);
     assert.equal(room.practice, false);
     assert.equal(room.bigBlind, 10);
-    assert.equal(npcPlayers(server, code).length, 5);
+    assert.ok(npcPlayers(server, code).length <= 5, 'target is 5 (6 seats, 1 vacancy)');
     assert.ok(room.players.every((p) => p.isBot && p.accountId), 'NPC seats must be isBot with real account');
     assert.ok(room.players.every((p) => !p.socketId), 'NPC seats have no socket');
   }
@@ -242,4 +244,105 @@ test('admin users list flags NPC accounts', async (t) => {
   const human = await register(server.port, '真人丙');
   const after = (await api(server.port, 'GET', '/api/admin/users?page=1', { token: ADMIN_TOKEN })).json;
   assert.equal(after.users.find((user) => user.id === human.accountId).isNpc, false);
+});
+
+test('admin adds a configured npc table; heal seats it per config; disable retires it', async (t) => {
+  const server = await createPokerServer(fastOptions({ npcTables: 4 }));
+  t.after(async () => { await server.close(); });
+  const created = (await api(server.port, 'POST', '/api/admin/npc-tables', {
+    token: ADMIN_TOKEN,
+    body: { smallBlind: 10, bigBlind: 20, buyIn: 1000, maxSeats: 3, keepVacant: 1 },
+  })).json;
+  assert.equal(created.ok, true, JSON.stringify(created));
+  const { code, id } = created.table;
+  assert.match(code, /^88\d{4}$/);
+  const room = await poll('custom npc room created and seated', () => {
+    const candidate = server.rooms.get(code);
+    return candidate && npcPlayers(server, code).length >= 2 ? candidate : null;
+  });
+  assert.equal(room.bigBlind, 20);
+  assert.equal(room.buyIn, 1000);
+  assert.equal(npcPlayers(server, code).length, 2, '3 seats with 1 vacancy = 2 NPCs');
+  assert.ok(room.players.every((p) => p.accountId), 'NPC seats carry real accounts');
+
+  // 停用：NPC 撤出、房间清除；配置里 active=false
+  await api(server.port, 'POST', `/api/admin/npc-tables/${id}/enabled`, { token: ADMIN_TOKEN, body: { enabled: false } });
+  await poll('disabled npc room removed', () => (server.rooms.has(code) ? null : true));
+  const list = (await api(server.port, 'GET', '/api/admin/npc-tables', { token: ADMIN_TOKEN })).json;
+  const row = list.tables.find((table) => table.id === id);
+  assert.equal(row.enabled, false);
+  assert.equal(row.active, false);
+
+  // 删除配置 + 审计留痕
+  const deleted = (await api(server.port, 'DELETE', `/api/admin/npc-tables/${id}`, { token: ADMIN_TOKEN })).json;
+  assert.equal(deleted.ok, true);
+  const audit = server.db.prepare("SELECT action FROM admin_audit WHERE action LIKE 'NPC_TABLE_%'").all().map((r) => r.action);
+  for (const action of ['NPC_TABLE_CREATE', 'NPC_TABLE_DISABLE', 'NPC_TABLE_DELETE']) {
+    assert.ok(audit.includes(action), `audit must record ${action}`);
+  }
+});
+
+test('keepVacant=2 caps npc count at maxSeats - 2', async (t) => {
+  const server = await createPokerServer(fastOptions({ npcTables: 3 }));
+  t.after(async () => { await server.close(); });
+  const created = (await api(server.port, 'POST', '/api/admin/npc-tables', {
+    token: ADMIN_TOKEN,
+    body: { smallBlind: 5, bigBlind: 10, buyIn: 500, maxSeats: 6, keepVacant: 2 },
+  })).json;
+  const code = created.table.code;
+  await poll('six-seat table keeps two vacancies', () => {
+    const room = server.rooms.get(code);
+    return room && npcPlayers(server, code).length === 4 ? room : null;
+  });
+});
+
+test('npcTables cap: enabled configs beyond the limit stay inactive', async (t) => {
+  const server = await createPokerServer(fastOptions({ npcTables: 1 }));
+  t.after(async () => { await server.close(); });
+  const created = (await api(server.port, 'POST', '/api/admin/npc-tables', {
+    token: ADMIN_TOKEN,
+    body: { smallBlind: 5, bigBlind: 10, buyIn: 500, maxSeats: 6, keepVacant: 1 },
+  })).json;
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  assert.equal(server.rooms.has(created.table.code), false, 'beyond-cap config must not activate');
+  const list = (await api(server.port, 'GET', '/api/admin/npc-tables', { token: ADMIN_TOKEN })).json;
+  assert.equal(list.tables.find((table) => table.id === created.table.id).active, false);
+  assert.equal(list.tables.find((table) => table.code === npc.NPC_TABLE_CODES[0]).active, true);
+});
+
+test('npc churn: accounts never double-seat, totals conserved, seats keep vacancies', async (t) => {
+  const server = await createPokerServer(fastOptions({ npcTables: 4 }));
+  t.after(async () => { await server.close(); });
+  const tableA = (await api(server.port, 'POST', '/api/admin/npc-tables', {
+    token: ADMIN_TOKEN,
+    body: { smallBlind: 5, bigBlind: 10, buyIn: 500, maxSeats: 6, keepVacant: 1 },
+  })).json.table;
+  const tableB = (await api(server.port, 'POST', '/api/admin/npc-tables', {
+    token: ADMIN_TOKEN,
+    body: { smallBlind: 5, bigBlind: 10, buyIn: 500, maxSeats: 6, keepVacant: 1 },
+  })).json.table;
+  const codes = [npc.NPC_TABLE_CODES[0], npc.NPC_TABLE_CODES[1], tableA.code, tableB.code];
+  const targetByCode = new Map(codes.map((code) => [code, 5]));
+
+  // 采样 ~2s（80ms/tick ≈ 25 轮巡检）：守恒、不重复入座、每桌 ≤ 目标且留有空位
+  const snapshots = new Set();
+  const deadline = Date.now() + 2000;
+  while (Date.now() < deadline) {
+    const seatKey = [];
+    const seen = new Set();
+    for (const code of codes) {
+      const room = server.rooms.get(code);
+      const npcs = room ? room.players.filter((p) => p.npc && !p.departing) : [];
+      assert.ok(npcs.length <= targetByCode.get(code), `${code} over target: ${npcs.length}`);
+      assert.ok(npcs.length >= 2, `${code} fell below heads-up minimum`);
+      for (const p of npcs) {
+        assert.ok(!seen.has(p.accountId), `NPC ${p.name} seated at two tables`);
+        seen.add(p.accountId);
+      }
+      seatKey.push(`${code}:${npcs.length}`);
+    }
+    snapshots.add(seatKey.join('|'));
+    await new Promise((resolve) => setTimeout(resolve, 80));
+  }
+  assert.ok(snapshots.size > 1, `expected churn across samples, only saw ${[...snapshots][0]}`);
 });

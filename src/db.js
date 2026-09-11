@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
+import { NPC_DEFAULT_CONFIGS } from './npc.js';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS accounts (
@@ -108,6 +109,20 @@ CREATE TABLE IF NOT EXISTS admin_audit (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_admin_audit_time ON admin_audit(id);
+
+-- 氛围桌（NPC 常驻桌）配置：管理后台增删改，heal 巡检按行 reconcile。
+-- max_seats 2-6；keep_vacant 永远留给真人的空位数；enabled 停用后 NPC 撤出、房间清除。
+CREATE TABLE IF NOT EXISTS npc_table_configs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT NOT NULL UNIQUE,
+  small_blind INTEGER NOT NULL,
+  big_blind INTEGER NOT NULL,
+  buy_in INTEGER NOT NULL,
+  max_seats INTEGER NOT NULL,
+  keep_vacant INTEGER NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL
+);
 `;
 
 export function createDb(dbPath) {
@@ -117,7 +132,22 @@ export function createDb(dbPath) {
   db.exec(SCHEMA);
   migrateAccounts(db);
   migrateLedger(db);
+  seedNpcTableConfigs(db);
   return db;
+}
+
+// 老库升级/新库初始化：npc_table_configs 为空时种入默认的两张氛围桌
+// （880101/880102，5/10 盲注，目标 500，6 座留 1 空位），行为与升级前完全一致。
+function seedNpcTableConfigs(db) {
+  const count = db.prepare('SELECT COUNT(*) AS count FROM npc_table_configs').get().count;
+  if (count > 0) return;
+  const insert = db.prepare(`INSERT INTO npc_table_configs
+    (code, small_blind, big_blind, buy_in, max_seats, keep_vacant, enabled, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, 1, ?)`);
+  const now = Date.now();
+  for (const config of NPC_DEFAULT_CONFIGS) {
+    insert.run(config.code, config.smallBlind, config.bigBlind, config.buyIn, config.maxSeats, config.keepVacant, now);
+  }
 }
 
 // 老库 accounts 缺少的列：ADD COLUMN 补上（DEFAULT 0，无损、幂等）。

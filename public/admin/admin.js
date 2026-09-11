@@ -12,6 +12,15 @@
     gateError: $("gateError"),
     panel: $("panel"),
     logoutButton: $("logoutButton"),
+    npcHint: $("npcHint"),
+    npcForm: $("npcForm"),
+    npcSmallBlind: $("npcSmallBlind"),
+    npcBigBlind: $("npcBigBlind"),
+    npcBuyIn: $("npcBuyIn"),
+    npcMaxSeats: $("npcMaxSeats"),
+    npcKeepVacant: $("npcKeepVacant"),
+    npcBody: $("npcBody"),
+    npcEmpty: $("npcEmpty"),
     searchInput: $("searchInput"),
     usersCount: $("usersCount"),
     usersBody: $("usersBody"),
@@ -103,7 +112,8 @@
       await adminApi("/api/admin/users?page=1");
       sessionStorage.setItem(TOKEN_KEY, token);
       showPanel();
-      await Promise.all([loadUsers(), loadAudit(true)]);
+      startNpcPolling();
+      await Promise.all([loadUsers(), loadAudit(true), loadNpcTables()]);
     } catch (error) {
       sessionStorage.removeItem(TOKEN_KEY);
       token = "";
@@ -115,6 +125,90 @@
     token = "";
     elements.tokenInput.value = "";
     showGate();
+  });
+
+  // ---------- 氛围桌 ----------
+  let npcTimer = null;
+  async function loadNpcTables() {
+    try {
+      const data = await adminApi("/api/admin/npc-tables");
+      const tables = data.tables || [];
+      elements.npcHint.textContent = `上限 ${data.tableLimit} 张（NPC_TABLES），启用且排在前面的配置才会激活`;
+      elements.npcEmpty.hidden = tables.length > 0;
+      elements.npcBody.innerHTML = tables.map((table) => {
+        const live = table.live
+          ? `${table.live.humans} 真人 · ${table.live.npcs} NPC${table.live.phase === "lobby" ? "" : " · 对局中"}`
+          : "未开桌";
+        const status = table.active
+          ? '<span class="admin-badge">生效中</span>'
+          : table.enabled ? '<span class="admin-badge is-banned">排队中</span>' : '<span class="admin-badge is-banned">已停用</span>';
+        return `
+        <tr data-table-id="${esc(table.id)}">
+          <td>${esc(table.code)}</td>
+          <td>${table.smallBlind} / ${table.bigBlind}</td>
+          <td>${fmtMoney(table.buyIn)}</td>
+          <td>${table.maxSeats} 人 · 留 ${table.keepVacant} 空</td>
+          <td>${live}</td>
+          <td>${status}</td>
+          <td>
+            <div class="admin-actions">
+              <button type="button" class="button secondary" data-action="toggle">${table.enabled ? "停用" : "启用"}</button>
+              <button type="button" class="button secondary" data-action="delete">删除</button>
+            </div>
+          </td>
+        </tr>`;
+      }).join("");
+    } catch (error) {
+      toast(error.message, true);
+    }
+  }
+  function startNpcPolling() {
+    stopNpcPolling();
+    npcTimer = setInterval(loadNpcTables, 10000);
+  }
+  function stopNpcPolling() {
+    if (npcTimer) { clearInterval(npcTimer); npcTimer = null; }
+  }
+  elements.npcForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = {
+      smallBlind: Number(elements.npcSmallBlind.value),
+      bigBlind: Number(elements.npcBigBlind.value),
+      buyIn: Number(elements.npcBuyIn.value),
+      maxSeats: Number(elements.npcMaxSeats.value),
+      keepVacant: Number(elements.npcKeepVacant.value),
+    };
+    try {
+      const result = await adminApi("/api/admin/npc-tables", { method: "POST", body: JSON.stringify(payload) });
+      toast(`已添加氛围桌 ${result.table.code}`);
+      await loadNpcTables();
+    } catch (error) {
+      toast(error.message, true);
+    }
+  });
+  elements.npcBody.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-action]");
+    if (!button) return;
+    const row = button.closest("[data-table-id]");
+    const tableId = row?.dataset.tableId;
+    if (!tableId) return;
+    try {
+      if (button.dataset.action === "toggle") {
+        const enabled = button.textContent.trim() === "启用";
+        const result = await adminApi(`/api/admin/npc-tables/${tableId}/enabled`, {
+          method: "POST",
+          body: JSON.stringify({ enabled }),
+        });
+        toast(`已${result.enabled ? "启用" : "停用"} ${result.code}`);
+      } else if (button.dataset.action === "delete") {
+        if (!window.confirm("确认删除这张氛围桌？桌上 NPC 会在本手结束后撤出。")) return;
+        const result = await adminApi(`/api/admin/npc-tables/${tableId}`, { method: "DELETE" });
+        toast(`已删除 ${result.code}`);
+      }
+      await loadNpcTables();
+    } catch (error) {
+      toast(error.message, true);
+    }
   });
 
   // ---------- 用户列表 ----------
@@ -248,7 +342,8 @@
     try {
       await adminApi("/api/admin/users?page=1");
       showPanel();
-      await Promise.all([loadUsers(), loadAudit(true)]);
+      startNpcPolling();
+      await Promise.all([loadUsers(), loadAudit(true), loadNpcTables()]);
     } catch (error) {
       sessionStorage.removeItem(TOKEN_KEY);
       token = "";

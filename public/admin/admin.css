@@ -167,3 +167,22 @@
   .admin-gate { margin: 30px auto; padding: 20px 16px; }
   .admin-gate-row { flex-direction: column; }
 }
+
+.admin-npc { margin-bottom: 26px; }
+.admin-npc-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+.admin-npc-head h2 { margin: 0; font-size: 16px; }
+.admin-npc-form {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px;
+  padding: 12px 14px; margin-bottom: 12px;
+  background: #1c2420; border: 1px solid #2c3733; border-radius: 8px;
+}
+.admin-npc-form label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: #b4c1b8; }
+.admin-npc-form input, .admin-npc-form select {
+  width: 96px; height: 36px; padding: 0 10px;
+  background: #131a17; border: 1px solid #394541; border-radius: 6px; color: var(--text);
+}
+.admin-npc-form select { width: 76px; }
+
+@media (max-width: 680px) {
+  .admin-npc-form input, .admin-npc-form select { width: 84px; }
+}

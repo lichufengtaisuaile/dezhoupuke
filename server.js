@@ -47,7 +47,7 @@ export function networkUrls(port) {
 }
 
 export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTimeoutMs = 30000, botDelayMs = 1100, disconnectGraceMs = 90000, nextHandDelayMs = 5000, dbPath = path.join(ROOT, 'data', 'dezhou.db'), requireAuth = true, adminToken = process.env.DEZHOU_ADMIN_TOKEN ?? '', npcTables = Number(process.env.NPC_TABLES ?? 2), npcHealIntervalMs = 30000, npcBaseDelayMs = 800, npcJitterMs = 1800, mahjongTurnTimeoutMs = 20000, mahjongBotDelayMs = 750 } = {}) {
-  const npcTableCount = Number.isSafeInteger(npcTables) ? Math.min(Math.max(npcTables, 0), npc.NPC_TABLE_CODES.length) : 2;
+  const npcTableCount = Number.isSafeInteger(npcTables) ? Math.min(Math.max(npcTables, 0), 8) : 2;
   const app = express();
   const httpServer = createServer(app);
   const io = new Server(httpServer, { maxHttpBufferSize: 8192, serveClient: true });
@@ -195,6 +195,53 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
     try {
       const page = Number(req.query.page ?? 1);
       res.json({ ok: true, ...adminOps.auditPage(db, page) });
+    } catch (error) { apiError(res, error); }
+  });
+  // 氛围桌（NPC 常驻桌）管理：配置增删改后立即触发一次 heal，不等下个巡检周期。
+  app.get('/api/admin/npc-tables', (req, res) => {
+    if (!bearerAdmin(req, res)) return;
+    try {
+      const configs = npc.listNpcTableConfigs(db);
+      const enabledConfigs = configs.filter((config) => config.enabled);
+      const tables = configs.map((config) => {
+        const activeIndex = enabledConfigs.findIndex((entry) => entry.id === config.id);
+        const room = rooms.get(config.code);
+        return {
+          ...config,
+          // 生效 = 启用且在上限内；超上限的启用配置不激活（等价于排队停用）
+          active: config.enabled && activeIndex >= 0 && activeIndex < npcTableCount,
+          live: room ? {
+            phase: room.phase,
+            humans: room.players.filter((p) => !p.isBot && !p.departing).length,
+            npcs: room.players.filter((p) => p.npc && !p.departing).length,
+          } : null,
+        };
+      });
+      res.json({ ok: true, tables, tableLimit: npcTableCount });
+    } catch (error) { apiError(res, error); }
+  });
+  app.post('/api/admin/npc-tables', (req, res) => {
+    if (!bearerAdmin(req, res)) return;
+    try {
+      const table = npc.createNpcTableConfig(db, req.body ?? {});
+      healNpcTables();
+      res.json({ ok: true, table });
+    } catch (error) { apiError(res, error); }
+  });
+  app.post('/api/admin/npc-tables/:id/enabled', (req, res) => {
+    if (!bearerAdmin(req, res)) return;
+    try {
+      const result = npc.setNpcTableEnabled(db, Number(req.params.id), req.body?.enabled);
+      healNpcTables();
+      res.json({ ok: true, ...result });
+    } catch (error) { apiError(res, error); }
+  });
+  app.delete('/api/admin/npc-tables/:id', (req, res) => {
+    if (!bearerAdmin(req, res)) return;
+    try {
+      const result = npc.deleteNpcTableConfig(db, Number(req.params.id));
+      healNpcTables();
+      res.json({ ok: true, ...result });
     } catch (error) { apiError(res, error); }
   });
   // 老虎机记录：?page=N 分页（个人中心页签）或 ?limit=N 取最近 N 条（slot 页"最近开奖"）。
@@ -622,34 +669,34 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
     return player;
   }
 
-  // ---------- 常驻 NPC 系统桌 ----------
-  // NPC 是有真实账号的电脑玩家（accounts.npc=1），坐满两张系统桌的大部分座位，
+  // ---------- 常驻 NPC 系统桌（氛围桌，配置驱动） ----------
+  // NPC 是有真实账号的电脑玩家（accounts.npc=1），按 npc_table_configs 的每桌配置入座，
   // 对外广播剥离 isBot/difficulty（见 snapshot），表现得和真人完全一样；
   // 资金循环走与真人同一套钱包规则（BRING_IN/CASH_OUT/SUBSIDY），战绩计入排行榜。
-  const NPC_SMALL_BLIND = 5;
-  const NPC_BIG_BLIND = 10;
-  const NPC_STACK_TARGET = 500; // 桌上目标筹码（介于最小带入 200 与常见买入之间）
+  // 管理员在后台增删改配置；heal 每 30s reconcile 一次，NPC 在各桌间自动进出，不固定坐死。
   const npcAccounts = npcTableCount > 0 ? npc.ensureNpcAccounts(db) : [];
   const npcThinkDelay = () => npcBaseDelayMs + randomInt(npcJitterMs + 1);
+  const NPC_CHURN_RATE = 15; // 每个巡检周期、每张桌，超出保底的 NPC 起身换桌的概率（%）
 
-  function createNpcRoom(code) {
+  function createNpcRoom(config) {
     const room = {
-      code, smallBlind: NPC_SMALL_BLIND, bigBlind: NPC_BIG_BLIND, buyIn: NPC_STACK_TARGET,
+      code: config.code, smallBlind: config.smallBlind, bigBlind: config.bigBlind, buyIn: config.buyIn,
       phase: 'lobby', players: [], hostId: null, practice: false, npcTable: true,
+      npcConfigId: config.id,
       handNumber: 0, turnId: 0, turnDeadline: null, timer: null, table: null,
       autoNext: true, nextHandAt: null, nextHandTimer: null,
       board: [], holeCards: [], pot: 0, pots: [], round: null, dealerSeat: null,
       result: [], revealed: new Set(), log: [], logSequence: 0, startStacks: new Map(),
     };
-    rooms.set(code, room);
+    rooms.set(config.code, room);
     return room;
   }
-  // NPC 入座：从自己的钱包真实带入（与真人 join 同一套扣款）。
-  // 钱包连最小带入（BB×20=200）都不够时不入座，等补助/自愈下轮再试。
+  // NPC 入座：从自己的钱包真实带入（与真人 join 同一套扣款），目标为该桌配置的 buy_in。
+  // 钱包连最小带入（BB×20）都不够时不入座，等补助/自愈下轮再试。
   function seatNpc(room, entry) {
     const min = room.bigBlind * 20;
     const balance = wallet.balanceOf(db, entry.accountId);
-    const amount = Math.min(NPC_STACK_TARGET, balance);
+    const amount = Math.min(room.buyIn, balance);
     if (amount < min) return null;
     try {
       const player = newPlayer(room, entry.name, {
@@ -662,13 +709,13 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       throw error;
     }
   }
-  // 每手开始前/自愈时的资金补足：stack 低于最小带入就从自己钱包 BRING_IN 到目标，
+  // 每手开始前/自愈时的资金补足：stack 低于最小带入就从自己钱包 BRING_IN 到该桌目标，
   // 钱包不够先按正常规则领每日补助（限每日一次，与真人完全同规则）。
   // 全程复用 wallet 事务入口，重复调用只会补到目标，不会重复扣。
   function npcTopUp(room, player) {
     const min = room.bigBlind * 20;
     if (player.stack >= min) return;
-    const need = NPC_STACK_TARGET - player.stack;
+    const need = room.buyIn - player.stack;
     if (wallet.balanceOf(db, player.accountId) + player.stack < wallet.SUBSIDY_THRESHOLD) {
       try { wallet.grantSubsidy(db, player.accountId); } catch { /* 今日已领过，按规则不能再领 */ }
     }
@@ -678,40 +725,96 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
     player.stack += amount;
     log(room, `${player.name} 带入 ${amount} 筹码`);
   }
-  // 自愈：桌子缺失重建；被封禁的 NPC 移出且不再加回；NPC 数补到 clamp(5-真人, 0, 5)；
-  // 多余 NPC（真人占座导致超员）在非对局时起身让位；资金不足的桌上 NPC 尝试补足。
-  // 每次调整完 broadcast，由 scheduleNextHand 自动开下一手（NPC 桌无需真人动作）。
+  // 自愈：按 npc_table_configs reconcile 氛围桌。
+  // 生效配置 = enabled 按 id 排序取前 npcTableCount 张（超出上限的不激活，等价于停用）；
+  // 对每张生效桌：缺失按配置重建、参数变更在非对局时同步、封禁 NPC 移出不再加回、
+  // NPC 补到 clamp(maxSeats - keepVacant - 真人, 无真人时至少 2)——永远留 1–2 个空位给真人；
+  // 补满之后再按概率让一个超出保底的 NPC 起身，让别的桌下轮补位（自动进出）。
+  // 不再生效的配置：非对局时移出其 NPC；只剩真人时房间转为普通房由既有逻辑回收，全空直接清除。
   function healNpcTables() {
     if (closing || npcTableCount <= 0) return;
-    for (const [index, code] of npc.NPC_TABLE_CODES.entries()) {
-      if (index >= npcTableCount) break;
-      try {
-        let room = rooms.get(code);
-        if (!room) room = createNpcRoom(code);
-        for (const player of [...room.players]) {
-          if (player.npc && npc.isNpcBanned(db, player.accountId)) removePlayer(room, player);
-        }
-        const humans = room.players.filter(p => !p.isBot && !p.departing).length;
-        const target = Math.min(Math.max(5 - humans, 0), 5);
-        const npcs = room.players.filter(p => p.npc && !p.departing);
-        if (npcs.length > target && !isPlaying(room)) {
-          for (const player of npcs.slice(0, npcs.length - target)) removePlayer(room, player);
-        }
-        let seated = room.players.filter(p => p.npc && !p.departing).length;
-        for (const entry of npcAccounts) {
-          if (seated >= target) break;
-          if (npc.isNpcBanned(db, entry.accountId)) continue;
-          if (room.players.some(p => p.accountId === entry.accountId && !p.departing)) continue;
-          if (seatNpc(room, entry)) seated += 1;
-        }
-        for (const player of room.players) {
-          if (player.npc && !player.departing && player.stack < room.bigBlind * 20) npcTopUp(room, player);
-        }
-        if (!room.players.some(p => p.id === room.hostId && !p.departing)) transferHost(room);
-        if (room.players.length > 0) broadcast(room);
-      } catch (error) {
-        console.error('NPC heal failed:', code, error);
+    try {
+      const configs = npc.listNpcTableConfigs(db);
+      const active = configs.filter((config) => config.enabled).slice(0, npcTableCount);
+      const activeCodes = new Set(active.map((config) => config.code));
+      for (const config of active) reconcileNpcRoom(config);
+      for (const config of configs) {
+        if (!activeCodes.has(config.code)) retireNpcRoom(config.code);
       }
+    } catch (error) {
+      console.error('NPC heal failed:', error);
+    }
+  }
+  function reconcileNpcRoom(config) {
+    let room = rooms.get(config.code);
+    if (!room) {
+      room = createNpcRoom(config);
+    } else if (!isPlaying(room)
+      && (room.smallBlind !== config.smallBlind || room.bigBlind !== config.bigBlind || room.buyIn !== config.buyIn)) {
+      room.smallBlind = config.smallBlind;
+      room.bigBlind = config.bigBlind;
+      room.buyIn = config.buyIn;
+    }
+    for (const player of [...room.players]) {
+      if (player.npc && npc.isNpcBanned(db, player.accountId)) removePlayer(room, player);
+    }
+    const humans = room.players.filter(p => !p.isBot && !p.departing).length;
+    const target = Math.min(
+      Math.max(config.maxSeats - config.keepVacant - humans, humans ? 0 : 2),
+      config.maxSeats - humans,
+    );
+    const npcs = room.players.filter(p => p.npc && !p.departing);
+    if (npcs.length > target && !isPlaying(room)) {
+      for (const player of npcs.slice(0, npcs.length - target)) removePlayer(room, player);
+    }
+    // 补位：一个 NPC 同时只允许坐一张桌（跨桌查重），资金不够 seatNpc 自己会让位。
+    let seated = room.players.filter(p => p.npc && !p.departing).length;
+    const seatedElsewhere = new Set();
+    for (const other of rooms.values()) {
+      if (other === room) continue;
+      for (const p of other.players) if (p.npc && !p.departing) seatedElsewhere.add(p.accountId);
+    }
+    for (const entry of npcAccounts) {
+      if (seated >= target) break;
+      if (npc.isNpcBanned(db, entry.accountId)) continue;
+      if (room.players.some(p => p.accountId === entry.accountId && !p.departing)) continue;
+      if (seatedElsewhere.has(entry.accountId)) continue;
+      if (seatNpc(room, entry)) seated += 1;
+    }
+    // 自动进出：非对局时，超出保底（无真人时 2 个）的 NPC 按概率起身离座，
+    // 让其他桌的空缺下轮补位；本桌本轮不再补回，形成桌间流动。
+    const seatedNow = room.players.filter(p => p.npc && !p.departing);
+    const minKeep = humans ? 0 : 2;
+    if (!isPlaying(room) && seatedNow.length > minKeep && randomInt(100) < NPC_CHURN_RATE) {
+      removePlayer(room, seatedNow[seatedNow.length - 1]);
+    }
+    for (const player of room.players) {
+      if (player.npc && !player.departing && player.stack < room.bigBlind * 20) npcTopUp(room, player);
+    }
+    if (!room.players.some(p => p.id === room.hostId && !p.departing)) transferHost(room);
+    if (room.players.length > 0) broadcast(room);
+  }
+  function retireNpcRoom(code) {
+    const room = rooms.get(code);
+    if (!room) return;
+    if (!isPlaying(room)) {
+      for (const player of [...room.players]) {
+        if (player.npc && !player.departing) removePlayer(room, player);
+      }
+    }
+    if (room.players.length === 0) {
+      clearTurn(room);
+      clearNextHand(room);
+      rooms.delete(code);
+      deleteSnapshot(db, code);
+      broadcastLobby();
+    } else if (room.players.every(p => p.isBot || p.departing)) {
+      // 只剩离线真人/陪练：NPC 已撤出，等 removePlayer 的常规路径回收，这里先广播现状。
+      broadcast(room);
+    } else {
+      // 还有真人在玩：转为普通房（不再受 heal 管理），真人全退后由 removePlayer 回收。
+      room.npcTable = false;
+      broadcast(room);
     }
   }
   let npcHealTimer = null;

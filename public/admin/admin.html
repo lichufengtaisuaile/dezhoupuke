@@ -34,6 +34,51 @@
 
       <!-- 主面板 -->
       <main id="panel" hidden>
+        <section class="admin-npc">
+          <div class="admin-npc-head">
+            <h2>氛围桌</h2>
+            <span class="admin-count" id="npcHint"></span>
+          </div>
+          <form id="npcForm" class="admin-npc-form">
+            <label>小盲 <input id="npcSmallBlind" type="number" min="1" step="1" value="5" required /></label>
+            <label>大盲 <input id="npcBigBlind" type="number" min="2" step="1" value="10" required /></label>
+            <label>桌上目标 <input id="npcBuyIn" type="number" min="200" step="10" value="500" required /></label>
+            <label>最大人数
+              <select id="npcMaxSeats">
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6" selected>6</option>
+              </select>
+            </label>
+            <label>保留空位
+              <select id="npcKeepVacant">
+                <option value="1" selected>1</option>
+                <option value="2">2</option>
+              </select>
+            </label>
+            <button type="submit" class="button primary">添加氛围桌</button>
+          </form>
+          <div class="admin-table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>房间号</th>
+                  <th>盲注</th>
+                  <th>桌上目标</th>
+                  <th>人数/空位</th>
+                  <th>实时入座</th>
+                  <th>启用</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="npcBody"></tbody>
+            </table>
+            <p class="admin-empty" id="npcEmpty" hidden>还没有氛围桌，用上方表单添加</p>
+          </div>
+        </section>
+
         <div class="admin-toolbar">
           <input id="searchInput" type="search" placeholder="按昵称搜索…" aria-label="按昵称搜索" />
           <span class="admin-count" id="usersCount"></span>

@@ -738,8 +738,10 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       const active = configs.filter((config) => config.enabled).slice(0, npcTableCount);
       const activeCodes = new Set(active.map((config) => config.code));
       for (const config of active) reconcileNpcRoom(config);
-      for (const config of configs) {
-        if (!activeCodes.has(config.code)) retireNpcRoom(config.code);
+      // 孤儿清理：配置被删/停用/超上限的氛围桌房间都要退休。
+      // 必须按房间表扫描——被删除的配置行已不在列表里，只遍历配置会永远漏掉它们。
+      for (const room of rooms.values()) {
+        if (room.npcTable && !activeCodes.has(room.code)) retireNpcRoom(room.code);
       }
     } catch (error) {
       console.error('NPC heal failed:', error);
@@ -797,6 +799,9 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
   function retireNpcRoom(code) {
     const room = rooms.get(code);
     if (!room) return;
+    // 先掐断自动开新手（canAutoStart 会复核 autoNext），让当前手自然打完；
+    // NPC 桌的对局节奏很快，本手结束后下个巡检周期即可撤出 NPC。
+    room.autoNext = false;
     if (!isPlaying(room)) {
       for (const player of [...room.players]) {
         if (player.npc && !player.departing) removePlayer(room, player);
@@ -808,14 +813,12 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       rooms.delete(code);
       deleteSnapshot(db, code);
       broadcastLobby();
-    } else if (room.players.every(p => p.isBot || p.departing)) {
-      // 只剩离线真人/陪练：NPC 已撤出，等 removePlayer 的常规路径回收，这里先广播现状。
-      broadcast(room);
-    } else {
+    } else if (!room.players.every(p => p.isBot || p.departing)) {
       // 还有真人在玩：转为普通房（不再受 heal 管理），真人全退后由 removePlayer 回收。
       room.npcTable = false;
       broadcast(room);
     }
+    // 全 NPC 对局中：什么都不做，本手结束后下个 tick 再清。
   }
   let npcHealTimer = null;
   if (npcTableCount > 0) {

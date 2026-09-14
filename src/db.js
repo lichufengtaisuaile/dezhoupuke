@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS accounts (
   password_hash TEXT NOT NULL,
   created_at INTEGER NOT NULL,
   is_banned INTEGER NOT NULL DEFAULT 0,
-  npc INTEGER NOT NULL DEFAULT 0
+  npc INTEGER NOT NULL DEFAULT 0,
+  avatar TEXT
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -163,8 +164,9 @@ function seedNpcTableConfigs(db) {
   }
 }
 
-// 老库 accounts 缺少的列：ADD COLUMN 补上（DEFAULT 0，无损、幂等）。
+// 老库 accounts 缺少的列：ADD COLUMN 无损、幂等补上。
 // is_banned 为管理后台封禁标记；npc 标记系统常驻 NPC 账号（有真实经济身份）。
+// avatar 为预置头像 ID；NULL 沿用按昵称分配的默认头像。
 function migrateAccounts(db) {
   const columns = db.prepare('PRAGMA table_info(accounts)').all().map((column) => column.name);
   if (!columns.includes('is_banned')) {
@@ -172,6 +174,9 @@ function migrateAccounts(db) {
   }
   if (!columns.includes('npc')) {
     db.exec('ALTER TABLE accounts ADD COLUMN npc INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!columns.includes('avatar')) {
+    db.exec('ALTER TABLE accounts ADD COLUMN avatar TEXT');
   }
 }
 
@@ -219,6 +224,12 @@ export function saveSnapshot(db, room) {
     smallBlind: room.smallBlind,
     bigBlind: room.bigBlind,
     buyIn: room.buyIn,
+    maxBuyIn: room.maxBuyIn ?? room.buyIn,
+    mode: room.mode ?? 'cash',
+    custom: Boolean(room.custom),
+    passwordHash: room.passwordHash ?? null,
+    allowSpectators: room.allowSpectators === true,
+    tournamentLevel: room.tournamentLevel ?? 0,
     practice: Boolean(room.practice),
     autoNext: room.autoNext,
     hostId: room.hostId,

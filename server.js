@@ -1,7 +1,7 @@
 import express from 'express';
 import { createServer } from 'node:http';
 import { networkInterfaces } from 'node:os';
-import { randomBytes, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
+import { randomBytes, randomInt, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { Server } from 'socket.io';
@@ -26,6 +26,12 @@ const ROUND_NAMES = { preflop: '翻牌前', flop: '翻牌', turn: '转牌', rive
 const BOT_NAMES = ['小林', '阿岳', '小满', '阿森', '小夏'];
 const REACTIONS = new Map(globalThis.HOLDEM_REACTIONS.map(reaction => [reaction.id, reaction]));
 const REACTION_COOLDOWN_MS = 1200;
+const ROOM_PASSWORD_MIN = 4;
+const ROOM_PASSWORD_MAX = 32;
+const TOURNAMENT_LEVELS = [
+  [10, 20], [15, 30], [25, 50], [50, 100], [75, 150],
+  [100, 200], [150, 300], [200, 400], [300, 600], [500, 1000],
+];
 
 function requireThat(condition, message) { if (!condition) throw new GameError(message); }
 function validName(value) {
@@ -37,6 +43,22 @@ function validName(value) {
 function integer(value, min, max, label) {
   requireThat(Number.isSafeInteger(value) && value >= min && value <= max, `${label}需要是 ${min}–${max} 之间的整数`);
   return value;
+}
+function roomPasswordHash(password) {
+  if (password === undefined || password === null || password === '') return null;
+  requireThat(typeof password === 'string', '房间密码格式不正确');
+  requireThat([...password].length >= ROOM_PASSWORD_MIN && [...password].length <= ROOM_PASSWORD_MAX,
+    '房间密码需要 ' + ROOM_PASSWORD_MIN + '–' + ROOM_PASSWORD_MAX + ' 个字符');
+  const salt = randomBytes(16).toString('hex');
+  return salt + ':' + scryptSync(password, salt, 32).toString('hex');
+}
+function verifyRoomPassword(password, stored) {
+  if (!stored) return true;
+  if (typeof password !== 'string') return false;
+  const [salt, expected] = String(stored).split(':');
+  if (!salt || !expected) return false;
+  const actual = scryptSync(password, salt, 32).toString('hex');
+  return actual.length === expected.length && timingSafeEqual(Buffer.from(actual), Buffer.from(expected));
 }
 export function networkUrls(port) {
   return Object.entries(networkInterfaces())
@@ -52,6 +74,7 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
   const httpServer = createServer(app);
   const io = new Server(httpServer, { maxHttpBufferSize: 8192, serveClient: true });
   const db = createDb(dbPath);
+  const accountAvatar = db.prepare('SELECT avatar FROM accounts WHERE id = ?');
   const rooms = new Map();
   let mahjong;
   let actualPort = port;
@@ -117,8 +140,25 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
   app.get('/api/me/overview', (req, res) => {
     const account = bearerAccount(req, res);
     if (!account) return;
-    try { res.json({ ok: true, ...stats.overview(db, rooms, account.id) }); }
+    try { res.json({ ok: true, ...stats.overview(db, rooms, account.id), avatar: account.avatar }); }
     catch (error) { apiError(res, error); }
+  });
+  app.post('/api/me/avatar', (req, res) => {
+    const account = bearerAccount(req, res);
+    if (!account) return;
+    try {
+      const avatar = accounts.updateAvatar(db, account.id, req.body?.avatar);
+      for (const socket of io.sockets.sockets.values()) {
+        if (socket.data.account?.id !== account.id) continue;
+        socket.data.account.avatar = avatar;
+        socket.emit('account:avatar', { accountId: account.id, avatar });
+      }
+      for (const room of rooms.values()) {
+        if (room.players.some(player => player.accountId === account.id)) broadcast(room);
+      }
+      mahjong.updateAccountAvatar(account.id, avatar);
+      res.json({ ok: true, avatar });
+    } catch (error) { apiError(res, error); }
   });
   app.get('/api/me/hands', (req, res) => {
     const account = bearerAccount(req, res);
@@ -347,43 +387,51 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       canAllIn: self.stack > 0 && (canRaise || (actions.includes('call') && callAmount === self.stack)),
     };
   }
-  function snapshot(room, viewer) {
+  function playerAvatars(room) {
+    // Accounts are authoritative, including after reconnecting or restoring an old snapshot.
+    return new Map(room.players.map(p => [p.id, p.accountId ? accountAvatar.get(p.accountId)?.avatar ?? null : null]));
+  }
+  function snapshot(room, viewer, avatars = playerAvatars(room)) {
     const acting = isPlaying(room) && room.table.isBettingRoundInProgress();
     const turnSeat = acting ? room.table.playerToAct() : null;
     const showableWinner = foldWinner(room, viewer);
+    const viewerId = viewer?.id ?? null;
     return {
       code: room.code, phase: room.phase, handNumber: room.handNumber,
       autoNext: room.autoNext, nextHandAt: room.nextHandAt, practice: room.practice,
       smallBlind: room.smallBlind, bigBlind: room.bigBlind, buyIn: room.buyIn,
-      maxPlayers: 6, hostId: room.hostId, selfId: viewer.id,
+      maxBuyIn: room.maxBuyIn ?? room.buyIn, mode: room.mode ?? 'cash',
+      tournamentLevel: room.tournamentLevel ?? 0, allowSpectators: room.allowSpectators !== false,
+      passwordRequired: Boolean(room.passwordHash), maxPlayers: 6, hostId: room.hostId, selfId: viewerId,
+      spectator: !viewer, spectatorCount: room.spectators?.size ?? 0,
       players: room.players.map(p => {
         // NPC 对外完全表现为真人：剥离 isBot/difficulty，在线状态恒真。
         const hidden = p.npc === true;
         return {
-          id: p.id, name: p.name, seat: p.seat, stack: p.stack, bet: p.bet,
+          id: p.id, name: p.name, avatar: avatars.get(p.id) ?? null, seat: p.seat, stack: p.stack, bet: p.bet,
           connected: hidden ? true : p.connected, isBot: hidden ? false : p.isBot,
           folded: p.folded, inHand: p.inHand,
           ...(p.isBot && !hidden ? { difficulty: p.botDifficulty ?? 'normal' } : {}),
           hasCards: p.inHand && Boolean(room.holeCards[p.seat]),
-          cards: p.inHand && (p.id === viewer.id || room.revealed.has(p.seat)) ? room.holeCards[p.seat] ?? null : null,
+          cards: p.inHand && (p.id === viewerId || room.revealed.has(p.seat)) ? room.holeCards[p.seat] ?? null : null,
           lastAction: p.lastAction, winner: room.result.some(r => r.id === p.id),
         };
       }),
       board: room.board, round: room.round, pot: room.pot,
       pots: room.pots.map(p => ({ size: p.size })),
       dealerSeat: room.dealerSeat, turnSeat, turnDeadline: room.turnDeadline,
-      turnId: room.turnId, legal: viewer.seat === turnSeat ? getLegal(room) : null,
-      selfHand: viewer.inHand ? describeHand(room.holeCards[viewer.seat], room.board) : null,
+      turnId: room.turnId, legal: viewer?.seat === turnSeat ? getLegal(room) : null,
+      selfHand: viewer?.inHand ? describeHand(room.holeCards[viewer.seat], room.board) : null,
       canShowCards: Boolean(showableWinner && !showableWinner.revealed),
       result: room.result.map(winner => {
-        const visible = winner.id === viewer.id || winner.revealed;
+        const visible = winner.id === viewerId || winner.revealed;
         return { ...winner, cards: visible ? winner.cards : null, hand: visible ? winner.hand : null };
       }),
       log: room.log,
     };
   }
   function foldWinner(room, player) {
-    if (room.phase !== 'finished' || !player.inHand || player.folded || room.result.length !== 1) return null;
+    if (room.phase !== 'finished' || !player?.inHand || player.folded || room.result.length !== 1) return null;
     const winner = room.result[0];
     return winner.id === player.id && winner.reason === 'folds' ? winner : null;
   }
@@ -400,6 +448,8 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
         smallBlind: room.smallBlind, bigBlind: room.bigBlind, buyIn: room.buyIn,
         // 仅在练习桌时带 practice 标记，保持普通房间的摘要字段不变。
         ...(room.practice ? { practice: true } : {}),
+        ...(room.mode && room.mode !== 'cash' ? { mode: room.mode, tournamentLevel: room.tournamentLevel ?? 0 } : {}),
+        ...(room.custom ? { custom: true, maxBuyIn: room.maxBuyIn ?? room.buyIn, passwordRequired: Boolean(room.passwordHash), allowSpectators: room.allowSpectators !== false } : {}),
       }));
   }
   function myTables(accountId) {
@@ -413,6 +463,8 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
         bigBlind: room.bigBlind,
         myStack: player.stack,
         practice: Boolean(room.practice),
+        mode: room.mode ?? 'cash',
+        tournamentLevel: room.tournamentLevel ?? 0,
         playing: room.phase === 'playing',
       });
     }
@@ -431,9 +483,11 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
   function broadcast(room) {
     scheduleNextHand(room);
     saveSnapshot(db, room);
+    const avatars = playerAvatars(room);
     for (const p of room.players) {
-      if (p.socketId && p.connected) io.sockets.sockets.get(p.socketId)?.emit('room:state', snapshot(room, p));
+      if (p.socketId && p.connected) io.sockets.sockets.get(p.socketId)?.emit('room:state', snapshot(room, p, avatars));
     }
+    for (const socketId of room.spectators ?? []) io.sockets.sockets.get(socketId)?.emit('room:state', snapshot(room, null, avatars));
     broadcastLobby();
   }
   function syncTable(room) {
@@ -631,6 +685,11 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
     for (const p of room.players) if (p.npc && !p.departing) npcTopUp(room, p);
     const active = activePlayers(room);
     requireThat(active.length >= 2, '至少需要两位在线且有筹码的玩家');
+    if (room.mode === 'tournament' && room.handNumber > 0) {
+      room.tournamentLevel = Math.min((room.tournamentLevel ?? 0) + 1, TOURNAMENT_LEVELS.length - 1);
+      [room.smallBlind, room.bigBlind] = TOURNAMENT_LEVELS[room.tournamentLevel];
+      log(room, `比赛盲注升级至 ${room.smallBlind}/${room.bigBlind}`);
+    }
     clearNextHand(room);
     for (const p of active) if (p.isBot && !p.npc && p.stack === 0) { p.stack = room.buyIn; log(room, `${p.name} 补充 ${room.buyIn} 筹码`); }
     room.table = createTable({ smallBlind: room.smallBlind, bigBlind: room.bigBlind }, 6);
@@ -658,14 +717,16 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
     const seat = Array.from({ length: 6 }, (_, n) => n).find(n => !room.players.some(p => p.seat === n));
     let stack;
     if (account && !room.practice) {
-      const amount = bringIn ?? room.buyIn;
-      integer(amount, room.bigBlind * 20, 100000, '带入金额');
+      const amount = room.mode === 'tournament' ? room.buyIn : (bringIn ?? room.buyIn);
+      if (room.mode === 'tournament') requireThat(bringIn === null || bringIn === undefined || bringIn === room.buyIn, '比赛房间使用固定筹码');
+      integer(amount, room.bigBlind * 20, room.maxBuyIn ?? 100000, '带入金额');
       wallet.bringIn(db, account.id, amount, room.code);
       stack = amount;
     } else if (bot) {
       stack = room.buyIn;
     } else {
-      stack = bringIn ?? room.buyIn;
+      if (room.mode === 'tournament') requireThat(bringIn === null || bringIn === undefined || bringIn === room.buyIn, '比赛房间使用固定筹码');
+      stack = room.mode === 'tournament' ? room.buyIn : (bringIn ?? room.buyIn);
     }
     const player = {
       id: randomUUID(), token: randomBytes(32).toString('hex'), name, seat,
@@ -690,9 +751,10 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
   const NPC_CHURN_RATE = 15; // 每个巡检周期、每张桌，超出保底的 NPC 起身换桌的概率（%）
 
   function createNpcRoom(config) {
-    const room = {
-      code: config.code, smallBlind: config.smallBlind, bigBlind: config.bigBlind, buyIn: config.buyIn,
-      phase: 'lobby', players: [], hostId: null, practice: false, npcTable: true,
+      const room = {
+        code: config.code, smallBlind: config.smallBlind, bigBlind: config.bigBlind, buyIn: config.buyIn,
+        maxBuyIn: config.buyIn, mode: 'cash', custom: false, passwordHash: null, allowSpectators: false,
+        tournamentLevel: 0, spectators: new Set(), phase: 'lobby', players: [], hostId: null, practice: false, npcTable: true,
       npcConfigId: config.id,
       handNumber: 0, turnId: 0, turnDeadline: null, timer: null, table: null,
       autoNext: true, nextHandAt: null, nextHandTimer: null,
@@ -997,14 +1059,20 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       requireThat(rooms.size < 100, '房间较多，请稍后再试');
       requireThat(!requireAuth || socket.data.account, '请先登录后再创建房间');
       const name = socket.data.account?.name ?? validName(input.name);
+      const mode = input.mode === 'tournament' ? 'tournament' : 'cash';
+      const custom = input.custom === true || mode === 'tournament';
       const smallBlind = integer(input.smallBlind ?? 10, 1, 500, '小盲注');
       const bigBlind = integer(input.bigBlind ?? smallBlind * 2, smallBlind * 2, smallBlind * 2, '大盲注');
-      const buyIn = integer(input.buyIn ?? 2000, bigBlind * 20, 100000, '初始筹码');
+      const maxBuyIn = integer(input.maxBuyIn ?? input.buyIn ?? 2000, bigBlind * 20, 100000, '最大带入');
+      const buyIn = integer(input.buyIn ?? maxBuyIn, bigBlind * 20, maxBuyIn, '初始筹码');
+      const passwordHash = custom ? roomPasswordHash(input.password) : null;
+      const allowSpectators = custom ? input.allowSpectators !== false : false;
       const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
       let code;
       do { code = Array.from({ length: 6 }, () => alphabet[randomInt(alphabet.length)]).join(''); } while (rooms.has(code) || mahjong.hasCode(code));
       const room = {
-        code, smallBlind, bigBlind, buyIn, phase: 'lobby', players: [], hostId: null,
+        code, smallBlind, bigBlind, buyIn, maxBuyIn, mode, custom, passwordHash, allowSpectators,
+        tournamentLevel: 0, spectators: new Set(), phase: 'lobby', players: [], hostId: null,
         practice: input.practice === true,
         handNumber: 0, turnId: 0, turnDeadline: null, timer: null, table: null,
         autoNext: true, nextHandAt: null, nextHandTimer: null,
@@ -1024,12 +1092,29 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       const code = typeof input.code === 'string' ? input.code.trim().toUpperCase() : '';
       const room = rooms.get(code);
       requireThat(room, '没有找到房间，请检查房间号');
+      requireThat(verifyRoomPassword(input.password, room.passwordHash), '房间密码不正确');
       const player = newPlayer(room, socket.data.account?.name ?? validName(input.name), {
         account: socket.data.account, bringIn: input.bringIn ?? null,
       });
       const response = associate(socket, room, player);
       broadcast(room);
       return response;
+    });
+    on('room:spectate', input => {
+      requireThat(!socket.data.membership, '请先离开当前房间');
+      requireThat(!requireAuth || socket.data.account, '请先登录后再观战');
+      const code = typeof input.code === 'string' ? input.code.trim().toUpperCase() : '';
+      const room = rooms.get(code);
+      requireThat(room, '没有找到房间，请检查房间号');
+      requireThat(room.allowSpectators === true, '房主未开启观战');
+      requireThat(verifyRoomPassword(input.password, room.passwordHash), '房间密码不正确');
+      room.spectators ??= new Set();
+      room.spectators.add(socket.id);
+      socket.data.membership = { code: room.code, spectator: true };
+      socket.data.lobbySignature = null;
+      socket.emit('room:state', snapshot(room, null));
+      broadcastLobby();
+      return { code: room.code, spectator: true };
     });
     on('room:resume', input => {
       requireThat(!socket.data.membership, '当前页面已经在房间中');
@@ -1131,9 +1216,25 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
         broadcastLobby();
       }
     });
-    on('room:leave', () => { const { room, player } = member(socket); leave(socket, room, player); });
+    on('room:leave', () => {
+      if (socket.data.membership?.spectator) {
+        const room = rooms.get(socket.data.membership.code);
+        room?.spectators?.delete(socket.id);
+        socket.data.membership = null;
+        if (room) broadcastLobby();
+        return;
+      }
+      const { room, player } = member(socket); leave(socket, room, player);
+    });
     socket.on('disconnect', () => {
       if (!socket.data.membership) return;
+      if (socket.data.membership.spectator) {
+        const room = rooms.get(socket.data.membership.code);
+        room?.spectators?.delete(socket.id);
+        socket.data.membership = null;
+        if (room) broadcastLobby();
+        return;
+      }
       let context;
       try { context = member(socket); } catch { return; }
       const { room, player } = context;
@@ -1159,6 +1260,9 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       try {
         const room = {
           code: payload.code, smallBlind: payload.smallBlind, bigBlind: payload.bigBlind, buyIn: payload.buyIn,
+          maxBuyIn: payload.maxBuyIn ?? payload.buyIn, mode: payload.mode ?? 'cash', custom: Boolean(payload.custom),
+          passwordHash: payload.passwordHash ?? null, allowSpectators: payload.allowSpectators === true,
+          tournamentLevel: payload.tournamentLevel ?? 0, spectators: new Set(),
           practice: Boolean(payload.practice), npcTable: Boolean(payload.npcTable),
           phase: payload.phase, players: [], hostId: payload.hostId ?? null,
           handNumber: payload.handNumber ?? 0, turnId: 0, turnDeadline: null, timer: null, table: null,

@@ -55,6 +55,7 @@
     socket.on("disconnect", onSocketDisconnect);
     socket.on("connect_error", onSocketConnectError);
     socket.on("room:state", onRoomState);
+    socket.on("account:avatar", auth.applyAvatar);
     socket.on("lobby:state", data => {
       if (!state) updateLobbyRooms(data.rooms);
     });
@@ -78,6 +79,7 @@
     root: $("home-view"),
     onCreate: payload => enterRoom("room:create", payload),
     onJoin: payload => enterRoom("room:join", payload),
+    onSpectate: payload => enterRoom("room:spectate", payload),
     onRefresh: refreshLobby,
     onRequireAuth: (after) => requireAuth(after),
   });
@@ -261,7 +263,7 @@
     if (!panel) return;
     const account = auth.get();
     const show = Boolean(account && state && !state.practice);
-    panel.hidden = !show;
+    panel.hidden = !show || Boolean(state?.spectator);
     if (show) {
       $("wallet-balance").textContent = money(account.balance);
       $("wallet-table").textContent = money(playerSelf()?.stack || 0);
@@ -300,7 +302,7 @@
     );
   }
   function saveSession(data) {
-    session = { code: data.code, token: data.token, playerId: data.playerId };
+    session = { code: data.code, token: data.token, playerId: data.playerId, spectator: Boolean(data.spectator) };
     sessionStorage.setItem(storageKey, JSON.stringify(session));
     const url = new URL(location.href);
     url.searchParams.set("room", data.code);
@@ -438,7 +440,7 @@
     $("history-button").hidden = !inRoom;
     $("room-panel").hidden = !inRoom;
     lobby.setConnection(socketConnected() || !auth.get());
-    social.update(state, socketConnected());
+    social.update(state, socketConnected() && !state?.spectator);
     if (!state) return;
     $("room-code").textContent = state.code;
     $("table-room-code").textContent = state.code;
@@ -455,14 +457,17 @@
       )
       .join("");
     const host = isHost();
-    $("auto-next-control").hidden = !host || typeof state.autoNext !== "boolean";
+    const spectator = Boolean(state.spectator);
+    $("auto-next-control").hidden = spectator || !host || typeof state.autoNext !== "boolean";
     $("auto-next").checked = Boolean(state.autoNext);
     $("auto-next").disabled = pending || !socketConnected();
     const playing = state.phase === "playing";
     const funded = state.players.filter(
       (p) => (p.stack > 0 || p.isBot) && (p.connected || p.isBot),
     ).length;
-    $("bot-button").hidden = !host;
+    const hostActions = $("host-actions");
+    if (hostActions) hostActions.hidden = spectator;
+    $("bot-button").hidden = spectator || !host;
     $("bot-button").disabled =
       playing || state.players.length >= 6 || pending || !socketConnected();
     $("start-button").hidden = !host;
@@ -476,14 +481,16 @@
     $("rebuy-button").innerHTML = practice
       ? '<i data-lucide="coins"></i>补充筹码'
       : '<i data-lucide="gift"></i>领取每日补助';
-    $("quick-start").hidden = playing || !host;
+    $("quick-start").hidden = spectator || playing || !host;
     $("quick-start").disabled = $("start-button").disabled;
     $("quick-start").querySelector("span").textContent = $("start-label").textContent;
     $("quick-rebuy").hidden = $("rebuy-button").hidden;
     $("quick-rebuy").disabled = $("rebuy-button").disabled;
     $("quick-rebuy").querySelector("span").textContent = practice ? "补充筹码" : "领取每日补助";
     $("quick-invite").hidden = state.phase !== "lobby";
-    $("room-wait").textContent = playing
+    $("room-wait").textContent = spectator
+      ? "观战中"
+      : playing
       ? ""
       : funded < 2
         ? "等待至少两位玩家持有筹码"
@@ -577,9 +584,10 @@
       state.legal &&
       state.turnSeat === self?.seat,
     );
+    const spectator = Boolean(state?.spectator);
     const legal = state?.legal;
-    $("betting-controls").hidden = !myTurn;
-    $("idle-controls").hidden = myTurn;
+    $("betting-controls").hidden = spectator || !myTurn;
+    $("idle-controls").hidden = spectator || myTurn;
     $("idle-message").textContent = state?.phase === "playing" ? "牌局进行中" : "";
     tableLayout.update(state);
     let message = "等待入座";
@@ -598,7 +606,7 @@
                   : "等待其他玩家行动";
     if (!socketConnected()) message = "正在重新连接…";
     $("turn-message").textContent = message;
-    if (!myTurn) {
+    if (spectator || !myTurn) {
       $("countdown").textContent = "";
       return;
     }

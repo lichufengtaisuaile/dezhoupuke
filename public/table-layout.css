@@ -2,7 +2,7 @@
 body.in-room { background: #12191b; }
 body.in-room .app-shell { height: 100dvh; min-height: 640px; max-width: none; display: flex; flex-direction: column; }
 body.in-room .topbar { height: 58px; flex: 0 0 58px; margin: 0; padding: 0 28px; background: #192124; border-color: #344144; }
-body.in-room .brand-mark { width: 30px; height: 34px; font-size: 27px; }
+body.in-room .brand-mark { width: 34px; height: 34px; }
 body.in-room .brand strong { font-size: 20px; }
 body.in-room .topbar-right { gap: 16px; }
 body.in-room .workspace { display: flex; flex: 1; min-height: 0; padding: 0; gap: 0; }
@@ -144,7 +144,7 @@ body.in-room #history-backdrop { z-index: 70; }
   body.in-room .topbar { height: 46px; flex-basis: 46px; padding: 0 14px; }
   body.in-room .brand { gap: 8px; }
   body.in-room .brand strong { font-size: 18px; }
-  body.in-room .brand-mark { width: 25px; height: 28px; font-size: 23px; }
+  body.in-room .brand-mark { width: 28px; height: 28px; }
   body.in-room .brand-sub, body.in-room .play-money { display: none; }
   body.in-room .topbar-right { gap: 8px; }
   body.in-room .sound-controls input { width: 38px; }

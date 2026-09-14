@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import { GameError, requireThat } from './errors.js';
 import { balanceOf, grantRegister } from './wallet.js';
+import '../public/avatar-catalog.js';
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 登录态 30 天
 const KEY_LENGTH = 64;
@@ -55,7 +56,7 @@ export function register(db, name, password) {
     // 注册一次性赠送 10,000 筹码（REGISTER_GRANT 流水，幂等）
     grantRegister(db, id);
   })();
-  return { accountId: id, name: accountName, token: issueSession(db, id), balance: balanceOf(db, id) };
+  return { accountId: id, name: accountName, avatar: null, token: issueSession(db, id), balance: balanceOf(db, id) };
 }
 
 export function login(db, name, password) {
@@ -64,11 +65,18 @@ export function login(db, name, password) {
   const account = db.prepare('SELECT * FROM accounts WHERE name = ?').get(accountName);
   requireThat(account && verifyPassword(password, account.password_hash), '昵称或密码不正确');
   requireThat(!account.is_banned, '账号已被封禁');
-  return { accountId: account.id, name: account.name, token: issueSession(db, account.id), balance: balanceOf(db, account.id) };
+  return { accountId: account.id, name: account.name, avatar: account.avatar, token: issueSession(db, account.id), balance: balanceOf(db, account.id) };
 }
 
 export function authenticate(db, token) {
   if (typeof token !== 'string' || !token) return null;
-  return db.prepare(`SELECT a.id, a.name, a.is_banned AS isBanned FROM sessions s JOIN accounts a ON a.id = s.account_id
+  return db.prepare(`SELECT a.id, a.name, a.avatar, a.is_banned AS isBanned FROM sessions s JOIN accounts a ON a.id = s.account_id
                      WHERE s.token = ? AND s.expires_at > ?`).get(token, Date.now()) ?? null;
+}
+
+export function updateAvatar(db, accountId, avatar) {
+  requireThat(globalThis.TONGZHUO_AVATARS.isValid(avatar), '请选择列表中的头像');
+  const result = db.prepare('UPDATE accounts SET avatar = ? WHERE id = ?').run(avatar, accountId);
+  requireThat(result.changes === 1, '账号不存在');
+  return avatar;
 }

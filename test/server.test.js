@@ -188,6 +188,63 @@ test('rooms seat two through six people and enforce capacity and host permission
   assert.equal(host.state.players.filter((player) => player.inHand).length, 6);
 });
 
+test('custom rooms enforce password, expose spectator mode, and keep hole cards private', async (t) => {
+  const context = await fixture(t);
+  const host = await context.connect();
+  host.identity = await success(host, 'room:create', {
+    name: 'Host', mode: 'cash', custom: true, smallBlind: 25, bigBlind: 50,
+    buyIn: 2000, maxBuyIn: 5000, password: 'room-pass', allowSpectators: true,
+  });
+  const observer = await context.connect();
+  await rejected(observer, 'room:spectate', { code: host.identity.code, password: 'wrong-pass' });
+  const watched = await success(observer, 'room:spectate', { code: host.identity.code, password: 'room-pass' });
+  assert.equal(watched.spectator, true);
+  await stateWhere(observer, state => state.spectator === true);
+  assert.equal(observer.state.selfId, null);
+  assert.equal(observer.state.passwordRequired, true);
+  assert.equal(observer.state.players[0].cards, null);
+  assert.equal(observer.state.legal, null);
+  const lobby = await success(observer, 'lobby:list');
+  assert.equal(lobby.rooms[0].custom, true);
+  assert.equal(lobby.rooms[0].maxBuyIn, 5000);
+  assert.equal(lobby.rooms[0].passwordRequired, true);
+  assert.equal(lobby.rooms[0].allowSpectators, true);
+  await success(observer, 'room:leave');
+  assert.equal(context.server.rooms.get(host.identity.code).spectators.size, 0);
+});
+
+test('tournament rooms use fixed chips and increase blinds on each hand', async (t) => {
+  const context = await fixture(t);
+  const players = await context.room(2, {
+    mode: 'tournament', custom: true, smallBlind: 10, bigBlind: 20, buyIn: 2000,
+    maxBuyIn: 2000, allowSpectators: false,
+  });
+  assert.equal(players[1].identity.code, players[0].identity.code);
+  await success(players[0], 'room:start');
+  await stateWhere(players[0], state => state.phase === 'playing');
+  assert.equal(players[0].state.smallBlind, 10);
+  assert.equal(players[0].state.bigBlind, 20);
+  await foldHeadsUp(players);
+  await success(players[0], 'room:start');
+  await stateWhere(players[0], state => state.phase === 'playing' && state.handNumber === 2);
+  assert.equal(players[0].state.smallBlind, 15);
+  assert.equal(players[0].state.bigBlind, 30);
+  assert.equal(players[0].state.players.find(player => player.id === players[0].identity.playerId).stack, 1960);
+});
+
+test('tournament start with one funded player does not advance blinds', async (t) => {
+  const context = await fixture(t);
+  const host = await context.connect();
+  host.identity = await success(host, 'room:create', {
+    name: 'Host', mode: 'tournament', custom: true, smallBlind: 10, bigBlind: 20,
+    buyIn: 2000, maxBuyIn: 2000,
+  });
+  await rejected(host, 'room:start');
+  assert.equal(host.state.smallBlind, 10);
+  assert.equal(host.state.bigBlind, 20);
+  assert.equal(host.state.tournamentLevel, 0);
+});
+
 test('each connection sees only its own hole cards and no resume credentials', async (t) => {
   const context = await fixture(t);
   const players = await context.room(3);

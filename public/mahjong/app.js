@@ -132,6 +132,7 @@
       socket = window.io("/mahjong", { auth: { token: account.token }, autoConnect: false });
       socket.on("lobby:state", (data) => { rooms = data?.rooms || []; renderRooms(); });
       socket.on("room:state", receiveState);
+      socket.on("account:avatar", auth.applyAvatar);
       socket.on("room:left", (data) => {
         leaveLocal();
         if (data?.error || data?.message) toast(data.error || data.message);
@@ -198,7 +199,7 @@
       const count = Number(room.playerCount ?? seated.length);
       const full = count >= 4;
       const seatMarks = Array.from({ length: 4 }, (_, index) => {
-        if (seated[index]) return `<span title="${esc(seated[index].name)}"><img src="/avatars/player-${auth.avatarIndex(seated[index].name) + 1}.svg" alt="${esc(seated[index].name)}" /></span>`;
+        if (seated[index]) return `<span title="${esc(seated[index].name)}"><img src="${auth.avatarSource(seated[index].name, seated[index].avatar)}" alt="${esc(seated[index].name)}" /></span>`;
         return index < count ? '<span class="is-occupied" aria-label="已入座">●</span>' : '<span aria-label="空座位">＋</span>';
       }).join("");
       return `<article class="mj-room-card"><div class="mj-room-card-heading"><h3>${esc(room.code)}</h3><span class="mj-badge ${room.practice ? "is-practice" : ""}">${room.practice ? "练习桌" : "正式桌"}</span></div><p>底分 ${money(room.base)} · 带入 ${money(room.buyIn)}</p><div class="mj-room-seats" aria-label="${count} 人已入座">${seatMarks}</div><button class="button secondary" type="button" data-join-room="${esc(room.code)}" ${full && room.code !== savedRoom ? "disabled" : ""}>${room.code === savedRoom ? "回到牌桌" : full ? "房间已满" : `${phaseNames[room.phase] || "等待入座"} · 加入`}</button></article>`;
@@ -315,7 +316,7 @@
       const active = state.phase === "playing" && (round()?.stage === "responses" ? round()?.responses?.waitingSeats?.includes(seat) : Number(round()?.turnSeat) === seat);
       const net = Number(player.net ?? (player.stack - (player.startStack ?? player.stack)));
       const tags = [player.isBot ? "电脑陪练" : "", player.departing ? "结束后离桌" : player.trustee || player.connected === false ? "托管中" : "", state.phase !== "playing" ? player.ready ? "已准备" : "未准备" : ""].filter(Boolean);
-      html.push(`<div class="mj-opponent pos-${positions[offset]}" data-player-seat="${seat}"><div class="mj-player-badge"><span class="mj-player-avatar ${active ? "is-active" : ""}"><img src="/avatars/player-${auth.avatarIndex(player.name) + 1}.svg" alt="" />${Number(round()?.dealerSeat) === seat ? '<span class="mj-dealer">庄</span>' : ""}</span><div><span class="mj-player-name">${esc(player.name)}</span><span class="mj-player-stack" data-chip-seat="${seat}">${money(player.stack)}</span></div></div><div class="mj-player-detail"><span class="${scoreClass(net)}">本局 ${signed(net)}</span> <span>· 胡 ${player.huCount ?? player.wins ?? 0} 次</span></div><div class="mj-player-tags">${esc(tags.join(" · "))}</div><div class="mj-hidden-hand" aria-label="${Number(player.handCount || 0)} 张暗牌">${Array.from({ length: Math.min(14, Math.max(0, Number(player.handCount || 0))) }, () => '<span class="mj-tile-back" aria-hidden="true"></span>').join("")}</div><div class="mj-melds">${meldMarkup(player.melds)}</div></div>`);
+      html.push(`<div class="mj-opponent pos-${positions[offset]}" data-player-seat="${seat}"><div class="mj-player-badge"><span class="mj-player-avatar ${active ? "is-active" : ""}"><img src="${auth.avatarSource(player.name, player.avatar)}" alt="" />${Number(round()?.dealerSeat) === seat ? '<span class="mj-dealer">庄</span>' : ""}</span><div><span class="mj-player-name">${esc(player.name)}</span><span class="mj-player-stack" data-chip-seat="${seat}">${money(player.stack)}</span></div></div><div class="mj-player-detail"><span class="${scoreClass(net)}">本局 ${signed(net)}</span> <span>· 胡 ${player.huCount ?? player.wins ?? 0} 次</span></div><div class="mj-player-tags">${esc(tags.join(" · "))}</div><div class="mj-hidden-hand" aria-label="${Number(player.handCount || 0)} 张暗牌">${Array.from({ length: Math.min(14, Math.max(0, Number(player.handCount || 0))) }, () => '<span class="mj-tile-back" aria-hidden="true"></span>').join("")}</div><div class="mj-melds">${meldMarkup(player.melds)}</div></div>`);
     }
     renderMarkup($("mj-opponents"), html.join(""));
   }

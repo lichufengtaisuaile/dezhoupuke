@@ -10,6 +10,7 @@ export function createMahjongService({ io, db, pokerRooms, turnTimeoutMs = 20000
   const rooms = new Map();
   const timers = new Map();
   const nsp = io.of('/mahjong');
+  const accountAvatar = db.prepare('SELECT avatar FROM accounts WHERE id = ?');
   let closing = false;
   const copy = value => structuredClone(value);
   const codeOf = value => String(value ?? '').trim().toUpperCase();
@@ -21,13 +22,23 @@ export function createMahjongService({ io, db, pokerRooms, turnTimeoutMs = 20000
   };
   const accountRoom = id => [...rooms.values()].find(r => r.players.some(p => p.accountId === id));
   function lobbyRooms() {
-    return [...rooms.values()].map(r => ({ code: r.code, hostName: r.players.find(p => !p.isBot)?.name ?? '',
-      playerCount: r.players.length, onlineCount: r.players.filter(p => p.connected).length, maxPlayers: 4,
-      base: r.base, buyIn: r.buyIn, practice: r.practice, phase: r.phase, game: 'mahjong' }));
+    return [...rooms.values()].map(room => {
+      const avatars = playerAvatars(room);
+      return { code: room.code, hostName: room.players.find(p => !p.isBot)?.name ?? '',
+        playerCount: room.players.length, onlineCount: room.players.filter(p => p.connected).length, maxPlayers: 4,
+        base: room.base, buyIn: room.buyIn, practice: room.practice, phase: room.phase, game: 'mahjong',
+        // Public lobby summaries expose only the fields used by the avatar strip.
+        players: room.players.map(p => ({ name: p.name, seat: p.seat, avatar: avatars.get(p.seat) ?? null })) };
+    });
   }
-  function snapshot(room, player) {
+  function playerAvatars(room) {
+    return new Map(room.players.map(p => [p.seat, p.accountId ? accountAvatar.get(p.accountId)?.avatar ?? null : null]));
+  }
+  function snapshot(room, player, avatars = playerAvatars(room)) {
     const round = room.round ? snapshotMahjong(room.round, player.seat) : null;
     if (round) {
+      // The renderer prefers round.players, so resolve both lists from the current account.
+      round.players = round.players.map(p => ({ ...p, avatar: avatars.get(p.seat) ?? null }));
       round.number = room.roundNumber;
       round.responseWindowTurnId = room.responseWindowTurnId ?? null;
       round.deadline = room.deadlines?.[player.seat] ?? Math.min(...Object.values(room.deadlines ?? {}), Infinity);
@@ -37,13 +48,14 @@ export function createMahjongService({ io, db, pokerRooms, turnTimeoutMs = 20000
     return { code: room.code, base: room.base, buyIn: room.buyIn, practice: room.practice,
       phase: room.phase, selfId: player.id, rules: MAHJONG_RULES, round,
       players: room.players.map(p => ({ ...round?.players.find(rp => rp.seat === p.seat),
-        id: p.id, name: p.name, seat: p.seat, stack: p.stack, ready: p.ready,
+        id: p.id, name: p.name, avatar: avatars.get(p.seat) ?? null, seat: p.seat, stack: p.stack, ready: p.ready,
         connected: p.connected, departing: p.departing, trustee: p.trustee, isBot: p.isBot })) };
   }
   function broadcastLobby() { if (!closing) nsp.emit('lobby:state', { rooms: lobbyRooms() }); }
   function broadcast(room) {
     if (closing) return;
-    for (const p of room.players) if (p.connected && p.socketId) nsp.sockets.get(p.socketId)?.emit('room:state', snapshot(room, p));
+    const avatars = playerAvatars(room);
+    for (const p of room.players) if (p.connected && p.socketId) nsp.sockets.get(p.socketId)?.emit('room:state', snapshot(room, p, avatars));
     broadcastLobby();
   }
   function pendingSeats(room) {
@@ -304,6 +316,16 @@ export function createMahjongService({ io, db, pokerRooms, turnTimeoutMs = 20000
     } else cleanFinished(room.code);
   }
   return { rooms, store, lobbyRooms, rules: MAHJONG_RULES,
+    updateAccountAvatar(accountId, avatar) {
+      for (const socket of nsp.sockets.values()) {
+        if (socket.data.account?.id !== accountId) continue;
+        socket.data.account.avatar = avatar;
+        socket.emit('account:avatar', { accountId, avatar });
+      }
+      for (const room of rooms.values()) {
+        if (room.players.some(player => player.accountId === accountId)) broadcast(room);
+      }
+    },
     hasCode: code => rooms.has(code),
     myTables: accountId => [...rooms.values()].filter(r => r.players.some(p => p.accountId === accountId)).map(r => ({
       code: r.code, game: 'mahjong', base: r.base, myStack: r.players.find(p => p.accountId === accountId).stack,

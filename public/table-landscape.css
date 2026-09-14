@@ -2,7 +2,7 @@
   body.in-room .app-shell { height: 100dvh; min-height: 0; }
   body.in-room .topbar { height: 40px; flex-basis: 40px; padding: 0 max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px)); }
   body.in-room .brand { gap: 8px; }
-  body.in-room .brand-mark { width: 24px; height: 27px; font-size: 22px; }
+  body.in-room .brand-mark { width: 27px; height: 27px; }
   body.in-room .brand strong { font-size: 17px; }
   body.in-room .brand-sub { font-size: 10px; }
   body.in-room .topbar-right { gap: 12px; font-size: 10px; }

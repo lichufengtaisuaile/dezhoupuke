@@ -2,6 +2,7 @@
   "use strict";
 
   const AUTH_KEY = "tongzhuo-auth";
+  let avatarRevision = 0;
   const SUBSIDY_THRESHOLD = 2000;
   const LEDGER_TYPES = {
     REGISTER_GRANT: "注册赠送",
@@ -54,6 +55,25 @@
     if (had && notify) window.dispatchEvent(new CustomEvent("tongzhuo:logout"));
   }
 
+  function applyAvatar(data) {
+    const account = get();
+    if (!account || !window.tongzhuoAvatars.isValid(data?.avatar)) return;
+    if (data.accountId && account.accountId && data.accountId !== account.accountId) return;
+    avatarRevision += 1;
+    write({ ...account, avatar: data.avatar });
+    window.dispatchEvent(new CustomEvent("tongzhuo:profile"));
+  }
+
+  function applyOverview(data, token, revision) {
+    const account = get();
+    if (!account || account.token !== token) return null;
+    const next = { ...account, ...pickStats(data) };
+    if (revision !== avatarRevision) next.avatar = account.avatar;
+    write(next);
+    if (next.avatar !== account.avatar) window.dispatchEvent(new CustomEvent("tongzhuo:profile"));
+    return next;
+  }
+
   async function api(path, options = {}) {
     const account = get();
     const headers = { ...(options.headers || {}) };
@@ -78,17 +98,17 @@
   async function refreshBalance() {
     const account = get();
     if (!account) return null;
+    const revision = avatarRevision;
     try {
       const data = await api("/api/me/overview");
-      const next = { ...account, ...pickStats(data) };
-      write(next);
-      return next;
+      return applyOverview(data, account.token, revision);
     } catch {
-      return account;
+      return get();
     }
   }
   function pickStats(data) {
     return {
+      ...(Object.prototype.hasOwnProperty.call(data, "avatar") ? { avatar: data.avatar } : {}),
       balance: data.balance ?? 0,
       tableStack: data.tableStack ?? 0,
       totalAssets: data.totalAssets ?? data.balance ?? 0,
@@ -106,11 +126,13 @@
   }
 
   function avatarIndex(name) {
-    const hash = [...String(name || "player")].reduce((value, ch) => (value * 31 + ch.codePointAt(0)) >>> 0, 0);
-    return hash % 6;
+    return window.tongzhuoAvatars.index(name);
   }
-  function avatarMarkup(name) {
-    return `<span class="account-avatar"><img src="/avatars/player-${avatarIndex(name) + 1}.svg" width="64" height="64" alt="" draggable="false" /></span>`;
+  function avatarSource(name, avatar) {
+    return window.tongzhuoAvatars.source(name, avatar);
+  }
+  function avatarMarkup(name, avatar) {
+    return `<span class="account-avatar"><img src="${avatarSource(name, avatar)}" width="64" height="64" alt="" draggable="false" /></span>`;
   }
   function cardMarkup(card) {
     if (!card) return "";
@@ -228,7 +250,7 @@
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "操作未完成，请稍后重试");
-      write({ token: data.token, name: data.name, balance: data.balance ?? 0, tableStack: 0, totalAssets: data.balance ?? 0 });
+      write({ token: data.token, accountId: data.accountId, name: data.name, avatar: data.avatar ?? null, balance: data.balance ?? 0, tableStack: 0, totalAssets: data.balance ?? 0 });
       settleAuth(true);
     } catch (err) {
       error.textContent = err?.message || "操作未完成，请稍后重试";
@@ -266,6 +288,7 @@
         <button type="button" class="icon-button" data-profile-close aria-label="关闭个人中心" title="关闭个人中心"><i data-lucide="x"></i></button>
       </div>
       <div class="profile-account" data-profile-head></div>
+      <p class="avatar-save-status" data-avatar-status role="status" hidden></p>
       <div class="profile-tabs" role="group" aria-label="个人中心页签">
         <button type="button" data-profile-tab="overview" aria-pressed="true">总览</button>
         <button type="button" data-profile-tab="hands" aria-pressed="false">德州</button>
@@ -286,6 +309,7 @@
     drawer.querySelectorAll("[data-profile-tab]").forEach((button) =>
       button.addEventListener("click", () => switchTab(button.dataset.profileTab)));
     drawer.addEventListener("click", (event) => {
+      if (event.target.closest("[data-profile-avatar]")) openAvatarPicker();
       if (event.target.closest("[data-profile-subsidy]"))
         window.dispatchEvent(new CustomEvent("tongzhuo:claim-subsidy"));
       if (event.target.closest("[data-profile-logout]")) {
@@ -301,7 +325,7 @@
       }
     });
     document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && drawer && !drawer.hidden) closeProfile();
+      if (event.key === "Escape" && drawer && !drawer.hidden && !avatarDialog?.open) closeProfile();
     });
   }
 
@@ -313,6 +337,7 @@
     buildProfileDom();
     drawer.hidden = false;
     backdrop.hidden = false;
+    drawer.querySelector("[data-avatar-status]").hidden = true;
     switchTab("overview", true);
   }
   function closeProfile() {
@@ -340,7 +365,9 @@
     const account = get();
     if (!account || !drawer) return;
     drawer.querySelector("[data-profile-head]").innerHTML = `
-      ${avatarMarkup(account.name)}
+      <button type="button" class="profile-avatar-edit" data-profile-avatar aria-label="更换头像" title="更换头像">
+        ${avatarMarkup(account.name, account.avatar)}<span>更换头像</span>
+      </button>
       <div class="profile-account-info">
         <strong>${esc(account.name)}</strong>
         <span>可用 ${money(account.balance)} · 桌上 ${money(account.tableStack)}</span>
@@ -349,18 +376,111 @@
     icons();
   }
 
+  let avatarDialog = null;
+  let selectedAvatar = null;
+  let savingAvatar = false;
+  let avatarAccountToken = null;
+
+  function buildAvatarPicker() {
+    if (avatarDialog) return;
+    avatarDialog = document.createElement("dialog");
+    avatarDialog.className = "home-dialog avatar-dialog";
+    avatarDialog.setAttribute("aria-labelledby", "avatar-dialog-title");
+    avatarDialog.innerHTML = `
+      <div class="drawer-heading"><h2 id="avatar-dialog-title">更换头像</h2><button type="button" class="icon-button" data-avatar-close aria-label="关闭头像选择"><i data-lucide="x"></i></button></div>
+      <div class="avatar-selection-preview"><img width="80" height="80" alt="头像预览" draggable="false" /><div><strong data-avatar-name></strong><span>在所有游戏中使用</span></div></div>
+      <div class="avatar-options" role="group" aria-label="动物头像">
+        ${window.tongzhuoAvatars.items.map(item => `<button type="button" class="avatar-option" data-avatar-id="${item.id}" aria-label="${item.name}" aria-pressed="false"><img src="${item.src}" width="64" height="64" alt="" draggable="false" /><span>${item.name}</span></button>`).join("")}
+      </div>
+      <div class="avatar-picker-footer"><button type="button" class="avatar-default" data-avatar-default aria-pressed="false">恢复默认头像</button><p class="avatar-picker-error" data-avatar-error role="alert" hidden></p><button type="button" class="button primary full" data-avatar-save>保存头像</button></div>`;
+    document.body.append(avatarDialog);
+    avatarDialog.addEventListener("click", event => {
+      if (savingAvatar) return;
+      if (event.target.closest("[data-avatar-close]")) avatarDialog.close();
+      const option = event.target.closest("[data-avatar-id]");
+      if (option || event.target.closest("[data-avatar-default]")) {
+        selectedAvatar = option?.dataset.avatarId ?? null;
+        avatarDialog.querySelector("[data-avatar-error]").hidden = true;
+        renderAvatarSelection();
+      }
+      if (event.target.closest("[data-avatar-save]")) void saveAvatar();
+    });
+    avatarDialog.addEventListener("cancel", event => {
+      if (savingAvatar) event.preventDefault();
+    });
+    avatarDialog.addEventListener("close", () => {
+      if (isProfileOpen()) drawer.querySelector("[data-profile-avatar]")?.focus();
+    });
+  }
+
+  function renderAvatarSelection() {
+    const account = get();
+    if (!account) return;
+    const source = avatarSource(account.name, selectedAvatar);
+    const item = window.tongzhuoAvatars.items.find(item => item.src === source);
+    avatarDialog.querySelector(".avatar-selection-preview img").src = source;
+    avatarDialog.querySelector("[data-avatar-name]").textContent = selectedAvatar === null ? `默认 · ${item.name}` : item.name;
+    avatarDialog.querySelectorAll("[data-avatar-id]").forEach(button => {
+      button.setAttribute("aria-pressed", String(button.dataset.avatarId === selectedAvatar));
+    });
+    avatarDialog.querySelector("[data-avatar-default]").setAttribute("aria-pressed", String(selectedAvatar === null));
+    avatarDialog.querySelectorAll("button").forEach(button => { button.disabled = savingAvatar; });
+    const save = avatarDialog.querySelector("[data-avatar-save]");
+    save.disabled = savingAvatar || selectedAvatar === (account.avatar ?? null);
+    save.textContent = savingAvatar ? "保存中…" : "保存头像";
+    avatarDialog.setAttribute("aria-busy", String(savingAvatar));
+  }
+
+  function openAvatarPicker() {
+    const account = get();
+    if (!account) return;
+    buildAvatarPicker();
+    selectedAvatar = window.tongzhuoAvatars.isValid(account.avatar) ? account.avatar : null;
+    avatarAccountToken = account.token;
+    avatarDialog.querySelector("[data-avatar-error]").hidden = true;
+    renderAvatarSelection();
+    avatarDialog.showModal();
+    const target = selectedAvatar === null ? "[data-avatar-default]" : `[data-avatar-id="${selectedAvatar}"]`;
+    avatarDialog.querySelector(target)?.focus();
+    icons();
+  }
+
+  async function saveAvatar() {
+    if (savingAvatar || get()?.token !== avatarAccountToken) return;
+    savingAvatar = true;
+    renderAvatarSelection();
+    try {
+      const result = await api("/api/me/avatar", { method: "POST", body: JSON.stringify({ avatar: selectedAvatar }) });
+      if (get()?.token !== avatarAccountToken) { avatarDialog.close(); return; }
+      applyAvatar(result);
+      avatarDialog.close();
+      const status = drawer.querySelector("[data-avatar-status]");
+      status.textContent = "头像已更新";
+      status.hidden = false;
+    } catch (error) {
+      const message = avatarDialog.querySelector("[data-avatar-error]");
+      message.textContent = error?.error || "保存失败，请稍后重试";
+      message.hidden = false;
+    } finally {
+      savingAvatar = false;
+      renderAvatarSelection();
+    }
+  }
+
   async function loadOverview(force = false) {
     const panel = drawer.querySelector('[data-profile-panel="overview"]');
     if (!force && overviewData && panel.innerHTML) return;
     panel.innerHTML = `<p class="profile-empty">正在加载…</p>`;
     renderHead();
+    const account = get();
+    const revision = avatarRevision;
     try {
       const [overview, board] = await Promise.all([
         api("/api/me/overview"),
         boardEntries ? Promise.resolve(null) : api("/api/leaderboard"),
       ]);
       overviewData = overview;
-      write({ ...get(), ...pickStats(overview) });
+      if (!applyOverview(overview, account?.token, revision)) return;
       if (board) boardEntries = Array.isArray(board) ? board : (board.entries || []);
       renderHead();
       renderOverview(panel);
@@ -656,6 +776,18 @@
     if (profileTab === "ledger") loadLedger(true);
     renderHead();
   });
+  window.addEventListener("tongzhuo:profile", () => {
+    renderHead();
+    if (avatarDialog?.open) renderAvatarSelection();
+  });
+  window.addEventListener("tongzhuo:logout", () => {
+    if (avatarDialog?.open) avatarDialog.close();
+  });
+  window.addEventListener("storage", event => {
+    if (event.key !== AUTH_KEY) return;
+    avatarRevision += 1;
+    window.dispatchEvent(new CustomEvent("tongzhuo:profile"));
+  });
 
   // 顶栏身份簇：并入全局顶栏右侧（登录/注册、头像昵称余额、个人中心、补助）。
   window.createTopbar = function ({ mount, onRequireAuth }) {
@@ -675,7 +807,7 @@
         const rank = account.rank ? `<span class="topbar-rank">#${money(account.rank)}</span>` : "";
         mount.innerHTML = `
           <button class="topbar-account" type="button" data-topbar="profile" title="个人中心" aria-label="个人中心">
-            ${avatarMarkup(account.name)}
+            ${avatarMarkup(account.name, account.avatar)}
             <span class="topbar-account-text">
               <strong>${esc(account.name)}${rank}</strong>
               <span class="topbar-balance">${icon("coins")}可用 ${money(balance)}</span>
@@ -698,6 +830,10 @@
       }
     });
 
+    window.addEventListener("tongzhuo:profile", () => {
+      account = get();
+      render();
+    });
     render();
     return {
       setAccount(next) {
@@ -710,7 +846,7 @@
   window.tongzhuoAuth = {
     get, clear, api, refreshBalance,
     openAuthModal, openProfile,
-    avatarMarkup, avatarIndex,
+    avatarMarkup, avatarIndex, avatarSource, applyAvatar,
     money, esc, LEDGER_TYPES,
   };
 })();

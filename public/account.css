@@ -483,3 +483,128 @@ button.portal-game:hover { border-color: #728679; background: #252d2c; }
 @media (max-width: 370px) {
   .portal-view { padding: 23px 15px 30px; }
 }
+
+/* 自选动物头像 */
+
+.avatar-save-status { margin: -5px 0 16px; color: #a9d8ba; font-size: 12px; }
+
+.profile-avatar-edit {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  min-width: 64px;
+  min-height: 44px;
+  padding: 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #a9d8ba;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.profile-avatar-edit:hover:not(:disabled) { border-color: #485c49; background: #ffffff07; }
+
+.home-dialog.avatar-dialog {
+  width: 540px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 32px);
+  padding: 22px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding: 14px;
+  background: #1a231f;
+  border-color: #485c49;
+}
+.avatar-dialog .drawer-heading { gap: 12px; margin-bottom: 18px; }
+.avatar-dialog .drawer-heading h2 { margin: 0; font-size: 20px; font-weight: 600; }
+.avatar-dialog .drawer-heading button { min-width: 44px; min-height: 44px; flex: none; }
+.avatar-selection-preview {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px;
+  margin-bottom: 20px;
+  border: 1px solid #34463b;
+  border-radius: 6px;
+  background: #ffffff04;
+}
+.avatar-selection-preview > img { width: 80px; height: 80px; flex: none; object-fit: cover; }
+.avatar-selection-preview > div { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.avatar-selection-preview strong { color: #e0eae3; font-size: 16px; overflow-wrap: anywhere; }
+.avatar-selection-preview span { color: #9aac9f; font-size: 12px; line-height: 1.5; }
+.avatar-options { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.avatar-option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 9px 5px 8px;
+  border: 1px solid #3a4c40;
+  border-radius: 6px;
+  background: #222f27;
+  color: #c3d2c6;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.avatar-option img { display: block; width: 64px; max-width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; }
+.avatar-option span { max-width: 100%; overflow-wrap: anywhere; }
+.avatar-option:hover:not(:disabled) { border-color: #84b296; background: #2b3d31; }
+.avatar-option[aria-pressed="true"] {
+  border-color: #a9d8ba;
+  background: #314c3b;
+  box-shadow: inset 0 0 0 1px #a9d8ba;
+  color: #eef8f1;
+}
+.avatar-option[aria-pressed="true"]::after {
+  content: "✓";
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #314c3b;
+  border-radius: 50%;
+  background: #a9d8ba;
+  color: #143824;
+  font-size: 12px;
+  font-weight: 700;
+}
+.avatar-picker-footer { display: grid; gap: 10px; margin-top: 20px; }
+.avatar-default {
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #405347;
+  border-radius: 6px;
+  background: transparent;
+  color: #b7cbbb;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.avatar-default:hover:not(:disabled) { border-color: #84b296; background: #ffffff07; }
+.avatar-default[aria-pressed="true"] { border-color: #a9d8ba; color: #dff3e5; background: #314c3b; }
+.avatar-picker-error { margin: 0; color: #efa2a5; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.avatar-picker-footer .button { min-height: 44px; }
+.profile-avatar-edit:focus-visible,
+.avatar-dialog button:focus-visible { outline: 2px solid #d9c690; outline-offset: 3px; }
+.profile-avatar-edit:disabled,
+.avatar-dialog button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+@media (max-width: 520px) {
+  .home-dialog.avatar-dialog { padding: 18px; }
+  .avatar-options { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+}
+@media (max-width: 380px) {
+  .home-dialog.avatar-dialog { padding: 16px; }
+  .avatar-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .avatar-selection-preview { gap: 12px; padding: 12px; }
+  .avatar-selection-preview > img { width: 68px; height: 68px; }
+  .avatar-option img { width: 60px; }
+}

@@ -114,6 +114,7 @@
 .home-dialog-form select,
 .home-dialog-form input[type="number"],
 .home-dialog-form input[type="password"] { width: 100%; height: 40px; padding: 0 11px; background: #202728; border: 1px solid #394541; border-radius: 6px; color: var(--text); }
+.home-dialog-form .input-wrap input { padding-left: 38px; }
 .home-dialog-form > select { margin-bottom: 20px; }
 .home-dialog-actions { display: flex; gap: 8px; }
 .home-dialog-actions .button { flex: 1; }

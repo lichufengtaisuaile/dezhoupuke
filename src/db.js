@@ -225,6 +225,7 @@ export function saveSnapshot(db, room) {
     bigBlind: room.bigBlind,
     buyIn: room.buyIn,
     maxBuyIn: room.maxBuyIn ?? room.buyIn,
+    unlimitedBuyIn: Boolean(room.unlimitedBuyIn),
     mode: room.mode ?? 'cash',
     custom: Boolean(room.custom),
     passwordHash: room.passwordHash ?? null,

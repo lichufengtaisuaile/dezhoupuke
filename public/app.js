@@ -233,12 +233,13 @@
     const self = playerSelf();
     const account = auth.get();
     if (!state || !self || !account || state.practice || state.mode === "tournament") return null;
-    const maxStack = Number(state.maxBuyIn || state.buyIn || 0);
+    const unlimited = state.unlimitedBuyIn === true;
+    const maxStack = unlimited ? Number.MAX_SAFE_INTEGER : Number(state.maxBuyIn || state.buyIn || 0);
     const capacity = Math.max(0, maxStack - self.stack);
     const balance = Math.max(0, Number(account.balance || 0));
     const maximum = Math.min(capacity, balance);
     const minimum = Math.max(1, state.bigBlind * 20 - self.stack);
-    return { self, balance, maxStack, capacity, maximum, minimum };
+    return { self, balance, maxStack, capacity, maximum, minimum, unlimited };
   }
   function setRebuyAmount(amount) {
     const limits = rebuyLimits();
@@ -257,7 +258,9 @@
       ? `本桌至少需要 ${money(tableMinimum)} 筹码，还需转入 ${money(tableMinimum - resulting)}`
       : amount > 0
         ? `转入后桌上共有 ${money(resulting)} 筹码`
-        : `本桌最低 ${money(tableMinimum)}，最高 ${money(limits.maxStack)} 筹码`;
+        : limits.unlimited
+          ? `本桌最低 ${money(tableMinimum)}，桌上筹码无上限`
+          : `本桌最低 ${money(tableMinimum)}，最高 ${money(limits.maxStack)} 筹码`;
     $("rebuy-error").hidden = true;
   }
   function closeRebuyDialog() {
@@ -280,7 +283,10 @@
     }
     $("rebuy-balance").textContent = money(limits.balance);
     $("rebuy-stack").textContent = money(limits.self.stack);
-    $("rebuy-max").textContent = money(limits.maxStack);
+    $("rebuy-max").textContent = limits.unlimited ? "无上限" : money(limits.maxStack);
+    document.querySelector('[data-rebuy-preset="buy-in"]').textContent =
+      limits.self.stack < state.buyIn ? "补到初始" : "最小补充";
+    document.querySelector('[data-rebuy-preset="max"]').textContent = limits.unlimited ? "全部转入" : "补到上限";
     $("rebuy-amount").min = String(limits.minimum);
     $("rebuy-amount").max = String(limits.maximum);
     const target = Math.max(state.buyIn || 0, state.bigBlind * 20);
@@ -551,7 +557,8 @@
     const practice = Boolean(state.practice);
     const self = playerSelf();
     const canPracticeRebuy = practice && self?.stack === 0;
-    const canCashTopUp = !practice && state.mode !== "tournament" && self && self.stack < (state.maxBuyIn || state.buyIn);
+    const canCashTopUp = !practice && state.mode !== "tournament" && self
+      && (state.unlimitedBuyIn || self.stack < (state.maxBuyIn || state.buyIn));
     const canRebuy = !playing && (canPracticeRebuy || canCashTopUp);
     $("rebuy-button").hidden = !canRebuy;
     $("rebuy-button").disabled = pending || !socketConnected();

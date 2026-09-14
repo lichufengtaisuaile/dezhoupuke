@@ -400,7 +400,7 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       code: room.code, phase: room.phase, handNumber: room.handNumber,
       autoNext: room.autoNext, nextHandAt: room.nextHandAt, practice: room.practice,
       smallBlind: room.smallBlind, bigBlind: room.bigBlind, buyIn: room.buyIn,
-      maxBuyIn: room.maxBuyIn ?? room.buyIn, mode: room.mode ?? 'cash',
+      maxBuyIn: room.maxBuyIn ?? room.buyIn, unlimitedBuyIn: Boolean(room.unlimitedBuyIn), mode: room.mode ?? 'cash',
       tournamentLevel: room.tournamentLevel ?? 0, allowSpectators: room.allowSpectators !== false,
       passwordRequired: Boolean(room.passwordHash), maxPlayers: 6, hostId: room.hostId, selfId: viewerId,
       spectator: !viewer, spectatorCount: room.spectators?.size ?? 0,
@@ -449,7 +449,10 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
         // 仅在练习桌时带 practice 标记，保持普通房间的摘要字段不变。
         ...(room.practice ? { practice: true } : {}),
         ...(room.mode && room.mode !== 'cash' ? { mode: room.mode, tournamentLevel: room.tournamentLevel ?? 0 } : {}),
-        ...(room.custom ? { custom: true, maxBuyIn: room.maxBuyIn ?? room.buyIn, passwordRequired: Boolean(room.passwordHash), allowSpectators: room.allowSpectators !== false } : {}),
+        ...(room.custom ? {
+          custom: true, maxBuyIn: room.maxBuyIn ?? room.buyIn, unlimitedBuyIn: Boolean(room.unlimitedBuyIn),
+          passwordRequired: Boolean(room.passwordHash), allowSpectators: room.allowSpectators !== false,
+        } : {}),
       }));
   }
   function myTables(accountId) {
@@ -753,7 +756,7 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
   function createNpcRoom(config) {
       const room = {
         code: config.code, smallBlind: config.smallBlind, bigBlind: config.bigBlind, buyIn: config.buyIn,
-        maxBuyIn: config.buyIn, mode: 'cash', custom: false, passwordHash: null, allowSpectators: false,
+        maxBuyIn: config.buyIn, unlimitedBuyIn: false, mode: 'cash', custom: false, passwordHash: null, allowSpectators: false,
         tournamentLevel: 0, spectators: new Set(), phase: 'lobby', players: [], hostId: null, practice: false, npcTable: true,
       npcConfigId: config.id,
       handNumber: 0, turnId: 0, turnDeadline: null, timer: null, table: null,
@@ -1063,15 +1066,18 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       const custom = input.custom === true || mode === 'tournament';
       const smallBlind = integer(input.smallBlind ?? 10, 1, 500, '小盲注');
       const bigBlind = integer(input.bigBlind ?? smallBlind * 2, smallBlind * 2, smallBlind * 2, '大盲注');
-      const maxBuyIn = integer(input.maxBuyIn ?? input.buyIn ?? 2000, bigBlind * 20, 100000, '最大带入');
-      const buyIn = integer(input.buyIn ?? maxBuyIn, bigBlind * 20, maxBuyIn, '初始筹码');
+      const unlimitedBuyIn = custom && mode === 'cash' && input.unlimitedBuyIn === true;
+      const maxBuyIn = unlimitedBuyIn
+        ? Number.MAX_SAFE_INTEGER
+        : integer(input.maxBuyIn ?? input.buyIn ?? 2000, bigBlind * 20, 100000, '最大带入');
+      const buyIn = integer(input.buyIn ?? (unlimitedBuyIn ? 2000 : maxBuyIn), bigBlind * 20, maxBuyIn, '初始筹码');
       const passwordHash = custom ? roomPasswordHash(input.password) : null;
       const allowSpectators = custom ? input.allowSpectators !== false : false;
       const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
       let code;
       do { code = Array.from({ length: 6 }, () => alphabet[randomInt(alphabet.length)]).join(''); } while (rooms.has(code) || mahjong.hasCode(code));
       const room = {
-        code, smallBlind, bigBlind, buyIn, maxBuyIn, mode, custom, passwordHash, allowSpectators,
+        code, smallBlind, bigBlind, buyIn, maxBuyIn, unlimitedBuyIn, mode, custom, passwordHash, allowSpectators,
         tournamentLevel: 0, spectators: new Set(), phase: 'lobby', players: [], hostId: null,
         practice: input.practice === true,
         handNumber: 0, turnId: 0, turnDeadline: null, timer: null, table: null,
@@ -1275,7 +1281,8 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       try {
         const room = {
           code: payload.code, smallBlind: payload.smallBlind, bigBlind: payload.bigBlind, buyIn: payload.buyIn,
-          maxBuyIn: payload.maxBuyIn ?? payload.buyIn, mode: payload.mode ?? 'cash', custom: Boolean(payload.custom),
+          maxBuyIn: payload.maxBuyIn ?? payload.buyIn, unlimitedBuyIn: Boolean(payload.unlimitedBuyIn),
+          mode: payload.mode ?? 'cash', custom: Boolean(payload.custom),
           passwordHash: payload.passwordHash ?? null, allowSpectators: payload.allowSpectators === true,
           tournamentLevel: payload.tournamentLevel ?? 0, spectators: new Set(),
           practice: Boolean(payload.practice), npcTable: Boolean(payload.npcTable),

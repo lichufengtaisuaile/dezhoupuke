@@ -119,6 +119,34 @@
 .home-dialog-actions { display: flex; gap: 8px; }
 .home-dialog-actions .button { flex: 1; }
 .home-dialog-form .form-pair { margin-bottom: 21px; gap: 15px; }
+.home-field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.home-dialog-form .form-pair .home-unlimited-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 9px;
+  color: #c6b47e;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.home-unlimited-toggle input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--green);
+}
+.home-unlimited-toggle span {
+  font-size: 11px;
+}
+.home-max-buy-in-field > input:disabled {
+  color: #8b9991;
+  background: #1b2221;
+}
 .home-create-summary { display: flex; justify-content: space-between; gap: 10px; margin: 0 0 22px; color: #99aaa0; font-size: 11px; }
 .home-create-summary > span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .home-create-summary svg { width: 13px; height: 13px; }

@@ -65,7 +65,13 @@
           </div>
           <div class="form-pair">
             <div><label for="home-buy-in">起始筹码</label><input id="home-buy-in" name="buyIn" type="number" min="400" max="100000" step="1" value="2000" required /></div>
-            <div><label for="home-max-buy-in">最大带入</label><input id="home-max-buy-in" name="maxBuyIn" type="number" min="400" max="100000" step="1" value="10000" required /></div>
+            <div class="home-max-buy-in-field">
+              <div class="home-field-label-row">
+                <label for="home-max-buy-in">最大带入</label>
+                <label class="home-unlimited-toggle"><input type="checkbox" name="unlimitedBuyIn" /><span>无上限</span></label>
+              </div>
+              <input id="home-max-buy-in" name="maxBuyIn" type="number" min="400" max="100000" step="1" value="10000" required />
+            </div>
           </div>
           <label for="home-create-bring-in">带入金额</label>
           <div class="input-wrap">${icon("coins")}<input id="home-create-bring-in" name="bringIn" type="number" inputmode="numeric" min="400" max="100000" step="1" required /></div>
@@ -112,15 +118,21 @@
       const form = get("create-form");
       const bigBlind = Number(form.elements.bigBlind.value) || 20;
       const { min, max } = bringInRange(bigBlind);
+      const tournament = form.elements.mode.value === "tournament";
+      const unlimited = !tournament && form.elements.unlimitedBuyIn.checked;
       form.elements.bringIn.min = String(min);
       const maxBuyIn = Number(form.elements.maxBuyIn.value) || max;
-      form.elements.bringIn.max = String(Math.min(max, maxBuyIn));
-      get("create-bring-in-hint").textContent = form.elements.mode.value === "tournament"
+      if (unlimited) form.elements.bringIn.removeAttribute("max");
+      else form.elements.bringIn.max = String(Math.min(max, maxBuyIn));
+      get("create-bring-in-hint").textContent = tournament
         ? `比赛房固定 ${number(Number(form.elements.buyIn.value) || 0)} 筹码，不可中途追加`
-        : `范围 ${number(min)} – ${number(Math.min(max, maxBuyIn))}，从钱包余额中扣除`;
+        : unlimited
+          ? `最低 ${number(min)}，不设桌上上限，以钱包余额为准`
+          : `范围 ${number(min)} – ${number(Math.min(max, maxBuyIn))}，从钱包余额中扣除`;
       get("practice-note").hidden = !form.elements.practice.checked;
-      const tournament = form.elements.mode.value === "tournament";
-      form.elements.maxBuyIn.disabled = tournament;
+      form.elements.unlimitedBuyIn.disabled = tournament;
+      if (tournament) form.elements.unlimitedBuyIn.checked = false;
+      form.elements.maxBuyIn.disabled = tournament || unlimited;
       form.elements.allowSpectators.disabled = form.elements.practice.checked;
       if (tournament) form.elements.maxBuyIn.value = form.elements.buyIn.value;
     }
@@ -129,20 +141,25 @@
       const room = rooms.find((item) => item.code === form.elements.code.value);
       const { min, max } = bringInRange(room?.bigBlind ?? 20);
       form.elements.bringIn.min = String(min);
-      form.elements.bringIn.max = String(Math.min(max, Number(room?.maxBuyIn ?? max)));
+      if (room?.unlimitedBuyIn) form.elements.bringIn.removeAttribute("max");
+      else form.elements.bringIn.max = String(Math.min(max, Number(room?.maxBuyIn ?? max)));
       get("join-bring-in-hint").textContent = room?.mode === "tournament"
         ? `比赛房固定 ${number(room.buyIn)} 筹码，加入时一次带入`
-        : `范围 ${number(min)} – ${number(Math.min(max, Number(room?.maxBuyIn ?? max)))}，从钱包余额中扣除${room ? `；默认 ${number(room.buyIn)}` : ""}`;
+        : room?.unlimitedBuyIn
+          ? `最低 ${number(min)}，无上限，以钱包余额为准${room ? `；默认 ${number(room.buyIn)}` : ""}`
+          : `范围 ${number(min)} – ${number(Math.min(max, Number(room?.maxBuyIn ?? max)))}，从钱包余额中扣除${room ? `；默认 ${number(room.buyIn)}` : ""}`;
       const tournament = room?.mode === "tournament";
       form.elements.bringIn.hidden = Boolean(tournament);
       get("join-bring-in-hint").hidden = Boolean(tournament);
     }
-    function validBringIn(form, bigBlind, maxOverride = BRING_IN_MAX) {
+    function validBringIn(form, bigBlind, maxOverride = BRING_IN_MAX, unlimited = false) {
       const { min, max: absoluteMax } = bringInRange(bigBlind);
-      const max = Math.min(absoluteMax, Number(maxOverride) || absoluteMax);
+      const max = unlimited ? Number.MAX_SAFE_INTEGER : Math.min(absoluteMax, Number(maxOverride) || absoluteMax);
       const value = Number(form.elements.bringIn.value);
       if (!Number.isSafeInteger(value) || value < min || value > max) {
-        return `带入金额需要是 ${number(min)}–${number(max)} 之间的整数`;
+        return unlimited
+          ? `带入金额需要是不低于 ${number(min)} 的整数`
+          : `带入金额需要是 ${number(min)}–${number(max)} 之间的整数`;
       }
       return "";
     }
@@ -183,7 +200,7 @@
         return `<article class="home-room-card${full ? " is-full" : ""}" aria-label="${esc(room.hostName)}的牌桌，房间 ${esc(room.code)}">
           <div class="home-card-top"><span class="home-room-phase${playing ? " is-playing" : ""}"><span></span>${phaseText(room)}</span>${tournament ? '<span class="home-practice-badge">比赛房</span>' : room.practice ? '<span class="home-practice-badge">练习桌</span>' : ""}${room.passwordRequired ? icon("lock-keyhole") : ""}<span class="home-code">#${esc(room.code)}</span></div>
           <div class="home-card-main">${tableMarkup(room)}<div class="home-card-info"><h3 title="${esc(room.hostName)}">${esc(room.hostName)}的牌桌</h3><span class="home-room-host">${icon("crown")}<span>${esc(room.hostName)}</span></span></div></div>
-          <dl class="home-card-stakes"><div><dt>${tournament ? "当前盲注" : "小盲 / 大盲"}</dt><dd>${number(room.smallBlind)} <span>/</span> ${number(room.bigBlind)}</dd></div><div><dt>${tournament ? "固定筹码" : "最大带入"}</dt><dd>${number(tournament ? room.buyIn : (room.maxBuyIn ?? room.buyIn))}</dd></div></dl>
+          <dl class="home-card-stakes"><div><dt>${tournament ? "当前盲注" : "小盲 / 大盲"}</dt><dd>${number(room.smallBlind)} <span>/</span> ${number(room.bigBlind)}</dd></div><div><dt>${tournament ? "固定筹码" : "最大带入"}</dt><dd>${!tournament && room.unlimitedBuyIn ? "无上限" : number(tournament ? room.buyIn : (room.maxBuyIn ?? room.buyIn))}</dd></div></dl>
           <div class="home-card-bottom"><span class="home-occupancy">${icon("users-round")}<strong>${number(room.playerCount)}</strong><span>/ ${number(room.maxPlayers)} 人</span></span><div class="home-card-actions"><button type="button" class="button ${full ? "secondary" : "primary"}" data-room-code="${esc(room.code)}"${full || busy() ? " disabled" : ""}>${icon(full ? "lock-keyhole" : "log-in")}${full ? "已满员" : "加入牌桌"}</button>${watchable ? `<button type="button" class="button secondary" data-spectate-code="${esc(room.code)}"${busy() ? " disabled" : ""}>${icon("eye")}观战</button>` : ""}</div></div>
         </article>`;
       }).join("") : `<div class="home-empty${loading || !connected ? " is-loading" : ""}"><div class="home-empty-icon">${icon(emptyIcon)}</div><h3>${emptyTitle}</h3>${emptyAction}</div>`;
@@ -252,13 +269,15 @@
         if (kind === "create") {
           const smallBlind = Number(form.elements.smallBlind.value);
           const bigBlind = Number(form.elements.bigBlind.value);
-          const message = validBringIn(form, bigBlind, form.elements.maxBuyIn.value);
+          const unlimitedBuyIn = form.elements.unlimitedBuyIn.checked;
+          const message = validBringIn(form, bigBlind, form.elements.maxBuyIn.value, unlimitedBuyIn);
           if (form.elements.mode.value !== "tournament" && message) throw new Error(message);
           response = await onCreate({
             mode: form.elements.mode.value, custom: true,
             smallBlind, bigBlind,
             buyIn: Number(form.elements.buyIn.value),
             maxBuyIn: Number(form.elements.maxBuyIn.value),
+            unlimitedBuyIn,
             bringIn: Number(form.elements.bringIn.value),
             password: form.elements.password.value,
             allowSpectators: form.elements.allowSpectators.checked,
@@ -266,7 +285,7 @@
           });
         } else {
           const room = rooms.find((item) => item.code === form.elements.code.value);
-          const message = validBringIn(form, room?.bigBlind ?? 20, room?.maxBuyIn);
+          const message = validBringIn(form, room?.bigBlind ?? 20, room?.maxBuyIn, room?.unlimitedBuyIn);
           if (room?.mode !== "tournament" && message) throw new Error(message);
           response = await onJoin({
             code: form.elements.code.value.trim().toUpperCase(),
@@ -309,6 +328,7 @@
     get("create-form").elements.smallBlind.addEventListener("change", () => syncCreateBringIn());
     get("create-form").elements.bigBlind.addEventListener("change", () => syncCreateBringIn());
     get("create-form").elements.maxBuyIn.addEventListener("change", () => syncCreateBringIn());
+    get("create-form").elements.unlimitedBuyIn.addEventListener("change", () => syncCreateBringIn());
     get("create-form").elements.buyIn.addEventListener("change", () => {
       get("create-form").elements.bringIn.value = get("create-form").elements.buyIn.value;
       syncCreateBringIn();

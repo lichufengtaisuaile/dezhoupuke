@@ -300,6 +300,37 @@ test('cash room top-up moves wallet chips onto the table after a hand', async (t
   assert.ok(guest.state.nextHandAt > Date.now(), 'paid top-up should make the busted player eligible for the next hand');
 });
 
+test('unlimited cash rooms accept large wallet bring-ins and expose the rule to clients', async (t) => {
+  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:', npcTables: 0 });
+  t.after(async () => { await server.close(); });
+
+  const alice = (await api(server.port, 'POST', '/api/register', { body: { name: 'unlim-a', password: 'secret123' } })).json;
+  const bob = (await api(server.port, 'POST', '/api/register', { body: { name: 'unlim-b', password: 'secret123' } })).json;
+  server.db.prepare('UPDATE wallets SET balance = 2000000 WHERE account_id IN (?, ?)').run(alice.accountId, bob.accountId);
+  const host = await connect(server.port, alice.token);
+  const guest = await connect(server.port, bob.token);
+
+  host.identity = await success(host.socket, 'room:create', {
+    mode: 'cash', custom: true, smallBlind: 100, bigBlind: 200,
+    buyIn: 20000, maxBuyIn: 100000, unlimitedBuyIn: true, bringIn: 1000000,
+  });
+  assert.equal(host.state.unlimitedBuyIn, true);
+  assert.equal(host.state.maxBuyIn, Number.MAX_SAFE_INTEGER);
+  assert.equal(host.state.players.find(player => player.id === host.identity.playerId).stack, 1000000);
+  assert.equal(wallet.balanceOf(server.db, alice.accountId), 1000000);
+
+  guest.identity = await success(guest.socket, 'room:join', {
+    code: host.identity.code, bringIn: 1500000,
+  });
+  assert.equal(guest.state.unlimitedBuyIn, true);
+  assert.equal(guest.state.players.find(player => player.id === guest.identity.playerId).stack, 1500000);
+  assert.equal(wallet.balanceOf(server.db, bob.accountId), 500000);
+  const lobby = await success(host.socket, 'lobby:list');
+  const summary = lobby.rooms.find(room => room.code === host.identity.code);
+  assert.equal(summary.unlimitedBuyIn, true);
+  assert.equal(summary.maxBuyIn, Number.MAX_SAFE_INTEGER);
+});
+
 test('practice rooms use free chips, keep free rebuy, and skip the ledger', async (t) => {
   const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:', npcTables: 0 });
   t.after(async () => { await server.close(); });

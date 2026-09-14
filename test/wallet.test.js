@@ -185,7 +185,7 @@ test('settleHand writes hands and HAND_WIN memos idempotently without moving bal
   assert.equal(stats.ledgerPage(db, b.accountId, 1).total, 2);
 });
 
-test('auth-gated socket play: bring-in deducts, rebuy is refused, settlement settles, leave refunds', async (t) => {
+test('auth-gated socket play: bring-in deducts, full stacks cannot top up, settlement settles, leave refunds', async (t) => {
   const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:', npcTables: 0 });
   t.after(async () => { await server.close(); });
 
@@ -210,7 +210,7 @@ test('auth-gated socket play: bring-in deducts, rebuy is refused, settlement set
   assert.equal(overview.tableStack, 2000);
   assert.equal(overview.totalAssets, 10000);
 
-  await rejected(guest.socket, 'room:rebuy'); // 真人桌禁止免费回满
+  await rejected(guest.socket, 'room:rebuy', { amount: 1 });
   await success(host.socket, 'room:start');
   await stateWhere(host, (state) => state.phase === 'playing' && state.turnSeat !== null);
   const actor = self(host).seat === host.state.turnSeat ? host : guest;
@@ -239,6 +239,65 @@ test('auth-gated socket play: bring-in deducts, rebuy is refused, settlement set
   const subsidyError = (await rejected(lobbyClient.socket, 'room:subsidy')).error;
   assert.match(subsidyError, /今天已经领取过/);
   assert.equal(server.db.prepare('SELECT balance FROM wallets').get().balance, 100, 'a rejected subsidy must not change the balance');
+});
+
+test('cash room top-up moves wallet chips onto the table after a hand', async (t) => {
+  const server = await createPokerServer({
+    port: 0, host: '127.0.0.1', dbPath: ':memory:', npcTables: 0, nextHandDelayMs: 1000,
+  });
+  t.after(async () => { await server.close(); });
+
+  const alice = (await api(server.port, 'POST', '/api/register', { body: { name: 'topup-alice', password: 'secret123' } })).json;
+  const bob = (await api(server.port, 'POST', '/api/register', { body: { name: 'topup-bob', password: 'secret123' } })).json;
+  const host = await connect(server.port, alice.token);
+  const guest = await connect(server.port, bob.token);
+  host.identity = await success(host.socket, 'room:create', {
+    smallBlind: 10, bigBlind: 20, buyIn: 2000, maxBuyIn: 100000, bringIn: 2000,
+  });
+  guest.identity = await success(guest.socket, 'room:join', { code: host.identity.code, bringIn: 2000 });
+
+  await success(host.socket, 'room:start');
+  await stateWhere(host, state => state.phase === 'playing' && state.turnSeat !== null);
+  const duringHand = await rejected(guest.socket, 'room:rebuy', { amount: 2000 });
+  assert.match(duringHand.error, /本手结束后/);
+
+  const actor = host.state.players.find(player => player.id === host.state.selfId).seat === host.state.turnSeat ? host : guest;
+  await success(actor.socket, 'game:action', {
+    action: 'fold', handNumber: actor.state.handNumber, turnId: actor.state.turnId,
+  });
+  await stateWhere(host, state => state.phase === 'finished');
+
+  const room = server.rooms.get(host.identity.code);
+  const busted = room.players.find(player => player.id === guest.identity.playerId);
+  const winner = room.players.find(player => player.id === host.identity.playerId);
+  winner.stack += busted.stack;
+  busted.stack = 0;
+  const balanceBefore = wallet.balanceOf(server.db, bob.accountId);
+  const ledgerBefore = server.db.prepare(
+    "SELECT COUNT(*) AS count FROM ledger WHERE account_id = ? AND type = 'BRING_IN'",
+  ).get(bob.accountId).count;
+
+  const tooMuch = await rejected(guest.socket, 'room:rebuy', { amount: 100001 });
+  assert.match(tooMuch.error, /补充金额/);
+  const insufficient = await rejected(guest.socket, 'room:rebuy', { amount: balanceBefore + 1 });
+  assert.match(insufficient.error, /钱包余额不足/);
+  assert.equal(busted.stack, 0);
+  assert.equal(wallet.balanceOf(server.db, bob.accountId), balanceBefore);
+  assert.equal(server.db.prepare(
+    "SELECT COUNT(*) AS count FROM ledger WHERE account_id = ? AND type = 'BRING_IN'",
+  ).get(bob.accountId).count, ledgerBefore);
+
+  const toppedUp = await success(guest.socket, 'room:rebuy', { amount: 2000 });
+  assert.equal(toppedUp.amount, 2000);
+  assert.equal(toppedUp.stack, 2000);
+  assert.equal(busted.stack, 2000);
+  assert.equal(wallet.balanceOf(server.db, bob.accountId), balanceBefore - 2000);
+  assert.equal(wallet.balanceOf(server.db, bob.accountId) + busted.stack, balanceBefore);
+  const latestBringIn = server.db.prepare(
+    "SELECT amount, balance_after FROM ledger WHERE account_id = ? AND type = 'BRING_IN' ORDER BY id DESC LIMIT 1",
+  ).get(bob.accountId);
+  assert.deepEqual(latestBringIn, { amount: -2000, balance_after: balanceBefore - 2000 });
+  assert.ok(guest.state.nextHandAt > Date.now(), 'paid top-up should make the busted player eligible for the next hand');
 });
 
 test('practice rooms use free chips, keep free rebuy, and skip the ledger', async (t) => {

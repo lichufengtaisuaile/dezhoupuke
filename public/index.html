@@ -280,6 +280,39 @@
         <li class="empty-history">暂无记录</li>
       </ol>
     </aside>
+    <dialog class="home-dialog rebuy-dialog" id="rebuy-dialog" aria-labelledby="rebuy-title">
+      <div class="home-dialog-heading drawer-heading">
+        <div>
+          <span class="eyebrow">钱包转入</span>
+          <h2 id="rebuy-title">补充桌上筹码</h2>
+        </div>
+        <button class="icon-button" type="button" id="close-rebuy" title="关闭" aria-label="关闭补筹窗口"><i data-lucide="x"></i></button>
+      </div>
+      <div class="rebuy-summary">
+        <div><span>钱包余额</span><strong id="rebuy-balance">—</strong></div>
+        <div><span>桌上筹码</span><strong id="rebuy-stack">—</strong></div>
+        <div><span>桌上上限</span><strong id="rebuy-max">—</strong></div>
+      </div>
+      <form id="rebuy-form" class="home-dialog-form" novalidate>
+        <label for="rebuy-amount">转入金额</label>
+        <div class="rebuy-input-wrap">
+          <i data-lucide="coins"></i>
+          <input id="rebuy-amount" name="amount" type="number" min="1" step="1" inputmode="numeric" autocomplete="off" required />
+          <span>筹码</span>
+        </div>
+        <div class="rebuy-presets">
+          <button type="button" data-rebuy-preset="buy-in">补到初始</button>
+          <button type="button" data-rebuy-preset="max">补到上限</button>
+        </div>
+        <p class="rebuy-note" id="rebuy-note"></p>
+        <p class="home-dialog-error" id="rebuy-error" role="alert" hidden></p>
+        <button type="button" class="rebuy-subsidy" id="rebuy-subsidy" hidden><i data-lucide="gift"></i>余额不足，领取每日补助</button>
+        <div class="home-dialog-actions">
+          <button type="button" class="button secondary" id="cancel-rebuy">取消</button>
+          <button type="submit" class="button primary" id="confirm-rebuy"><i data-lucide="arrow-down-to-line"></i>确认转入</button>
+        </div>
+      </form>
+    </dialog>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   </body>
 </html>

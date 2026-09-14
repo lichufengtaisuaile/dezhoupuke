@@ -1289,6 +1289,152 @@ input[type="range"] {
   background: #442e2c;
   border-color: #97645f;
 }
+.rebuy-dialog {
+  width: 430px;
+  max-width: calc(100vw - 28px);
+  padding: 24px;
+  background: #1a231f;
+  border-color: #536b5b;
+}
+.rebuy-dialog .home-dialog-heading {
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+.rebuy-dialog .home-dialog-heading > div {
+  display: grid;
+  gap: 5px;
+}
+.rebuy-dialog .home-dialog-heading h2 {
+  margin: 0;
+}
+.rebuy-dialog .eyebrow {
+  color: #8faa98;
+}
+.rebuy-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 22px;
+  border: 1px solid #35463c;
+  border-radius: 7px;
+  background: #ffffff04;
+}
+.rebuy-summary > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 13px 12px;
+}
+.rebuy-summary > div + div {
+  border-left: 1px solid #35463c;
+}
+.rebuy-summary span {
+  color: #8fa297;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.rebuy-summary strong {
+  overflow: hidden;
+  color: #e7eee9;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+}
+.rebuy-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.rebuy-input-wrap > svg {
+  position: absolute;
+  left: 12px;
+  width: 16px;
+  height: 16px;
+  color: var(--gold);
+  pointer-events: none;
+}
+.home-dialog-form .rebuy-input-wrap input {
+  width: 100%;
+  height: 46px;
+  padding: 0 66px 0 38px;
+  border: 1px solid #485a4f;
+  border-radius: 6px;
+  background: #111a17;
+  color: var(--text);
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+.rebuy-input-wrap > span {
+  position: absolute;
+  right: 12px;
+  color: #82968a;
+  font-size: 11px;
+  pointer-events: none;
+}
+.rebuy-presets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.rebuy-presets button {
+  min-height: 38px;
+  border: 1px solid #3d5045;
+  border-radius: 6px;
+  background: #222e28;
+  color: #b9c9be;
+  font-size: 12px;
+}
+.rebuy-presets button:hover {
+  border-color: #6f927c;
+  background: #293b31;
+  color: #e2eee6;
+}
+.rebuy-note {
+  min-height: 19px;
+  margin: 14px 0;
+  color: #93a69a;
+  font-size: 11px;
+  line-height: 1.7;
+}
+.rebuy-dialog .home-dialog-error {
+  margin-top: -5px;
+}
+.rebuy-subsidy {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 40px;
+  margin: -3px 0 13px;
+  border: 1px solid #675c3f;
+  border-radius: 6px;
+  background: #332f22;
+  color: #ddc88f;
+  font-size: 12px;
+}
+.rebuy-subsidy:hover {
+  border-color: #978157;
+  background: #3d3726;
+}
+.rebuy-subsidy svg {
+  width: 15px;
+  height: 15px;
+}
+.rebuy-dialog .home-dialog-actions {
+  margin-top: 2px;
+}
+@media (max-width: 430px) {
+  .rebuy-dialog {
+    padding: 20px;
+  }
+  .rebuy-summary > div {
+    padding: 12px 9px;
+  }
+  .rebuy-summary strong {
+    font-size: 13px;
+  }
+}
 .offline .game-area {
   opacity: 0.8;
 }

@@ -1175,14 +1175,29 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       clearNextHand(room);
       broadcast(room);
     });
-    on('room:rebuy', () => {
+    on('room:rebuy', input => {
       const { room, player } = member(socket);
-      requireThat(freeChips(room), '真实筹码牌桌不能免费补充，筹码不足可领取每日补助');
       requireThat(!isPlaying(room), '本手结束后可以补充筹码');
-      requireThat(player.stack === 0, '筹码用完后可以重新补充');
-      player.stack = room.buyIn;
-      log(room, `${player.name} 补充 ${room.buyIn} 筹码`);
+      if (freeChips(room)) {
+        requireThat(player.stack === 0, '筹码用完后可以重新补充');
+        player.stack = room.buyIn;
+        log(room, `${player.name} 补充 ${room.buyIn} 筹码`);
+        broadcast(room);
+        return { amount: room.buyIn, stack: player.stack };
+      }
+      requireThat(room.mode !== 'tournament', '比赛房间不能中途补充筹码');
+      const account = socket.data.account;
+      requireThat(account && player.accountId === account.id, '请先登录后再补充筹码');
+      const maxBuyIn = room.maxBuyIn ?? room.buyIn;
+      requireThat(player.stack < maxBuyIn, '桌上筹码已达到上限');
+      const amount = integer(input.amount, 1, maxBuyIn - player.stack, '补充金额');
+      requireThat(player.stack + amount >= room.bigBlind * 20, `桌上筹码至少需要达到 ${room.bigBlind * 20}`);
+      requireThat(wallet.balanceOf(db, account.id) >= amount, '钱包余额不足');
+      wallet.bringIn(db, account.id, amount, room.code);
+      player.stack += amount;
+      log(room, `${player.name} 从钱包补充 ${amount} 筹码`);
       broadcast(room);
+      return { amount, stack: player.stack };
     });
     // 每日补助：每账号每天一次，总资产（余额 + 桌上筹码）低于 2,000 时可领 2,000。
     on('room:subsidy', () => {

@@ -229,6 +229,79 @@
   window.addEventListener("tongzhuo:logout", () => handleLogout("登录已过期，请重新登录"));
   window.addEventListener("tongzhuo:logout-request", () => handleLogout());
 
+  function rebuyLimits() {
+    const self = playerSelf();
+    const account = auth.get();
+    if (!state || !self || !account || state.practice || state.mode === "tournament") return null;
+    const maxStack = Number(state.maxBuyIn || state.buyIn || 0);
+    const capacity = Math.max(0, maxStack - self.stack);
+    const balance = Math.max(0, Number(account.balance || 0));
+    const maximum = Math.min(capacity, balance);
+    const minimum = Math.max(1, state.bigBlind * 20 - self.stack);
+    return { self, balance, maxStack, capacity, maximum, minimum };
+  }
+  function setRebuyAmount(amount) {
+    const limits = rebuyLimits();
+    if (!limits) return;
+    const normalized = Math.max(0, Math.min(Math.floor(Number(amount) || 0), limits.maximum));
+    $("rebuy-amount").value = normalized > 0 ? String(normalized) : "";
+    updateRebuyNote();
+  }
+  function updateRebuyNote() {
+    const limits = rebuyLimits();
+    if (!limits) return;
+    const amount = Number($("rebuy-amount").value || 0);
+    const resulting = limits.self.stack + amount;
+    const tableMinimum = state.bigBlind * 20;
+    $("rebuy-note").textContent = amount > 0 && resulting < tableMinimum
+      ? `本桌至少需要 ${money(tableMinimum)} 筹码，还需转入 ${money(tableMinimum - resulting)}`
+      : amount > 0
+        ? `转入后桌上共有 ${money(resulting)} 筹码`
+        : `本桌最低 ${money(tableMinimum)}，最高 ${money(limits.maxStack)} 筹码`;
+    $("rebuy-error").hidden = true;
+  }
+  function closeRebuyDialog() {
+    if ($("rebuy-dialog").open) $("rebuy-dialog").close();
+  }
+  async function openRebuyDialog() {
+    if (state?.practice) {
+      await exclusive("room:rebuy", {});
+      return;
+    }
+    if (state?.mode === "tournament") {
+      toast("比赛房间不能中途补充筹码", true);
+      return;
+    }
+    await refreshAccountBalance();
+    const limits = rebuyLimits();
+    if (!limits || limits.capacity <= 0) {
+      toast("桌上筹码已达到上限", true);
+      return;
+    }
+    $("rebuy-balance").textContent = money(limits.balance);
+    $("rebuy-stack").textContent = money(limits.self.stack);
+    $("rebuy-max").textContent = money(limits.maxStack);
+    $("rebuy-amount").min = String(limits.minimum);
+    $("rebuy-amount").max = String(limits.maximum);
+    const target = Math.max(state.buyIn || 0, state.bigBlind * 20);
+    const suggested = Math.min(
+      limits.maximum,
+      Math.max(limits.minimum, target - limits.self.stack),
+    );
+    setRebuyAmount(suggested);
+    $("confirm-rebuy").disabled = limits.maximum < limits.minimum;
+    $("rebuy-subsidy").hidden = limits.balance + limits.self.stack >= 2000;
+    $("rebuy-error").hidden = true;
+    if (limits.maximum < limits.minimum) {
+      $("rebuy-error").textContent = `钱包余额不足，至少需要转入 ${money(limits.minimum)} 筹码`;
+      $("rebuy-error").hidden = false;
+    }
+    if (!$("rebuy-dialog").open) $("rebuy-dialog").showModal();
+    icons();
+    $("rebuy-amount").focus();
+    $("rebuy-amount").select();
+  }
+
   async function enterRoom(event, payload) {
     if (!auth.get()) {
       const ok = await auth.openAuthModal();
@@ -325,6 +398,7 @@
     url.searchParams.delete("room");
     history.replaceState(null, "", url);
     $("history-drawer").hidden = $("history-backdrop").hidden = true;
+    closeRebuyDialog();
     render();
     refreshLobby();
     refreshTables();
@@ -475,18 +549,21 @@
       playing || funded < 2 || pending || !socketConnected();
     $("start-label").textContent = state.handNumber > 0 ? "下一手" : "开始牌局";
     const practice = Boolean(state.practice);
-    const broke = !playing && Boolean(playerSelf()) && playerSelf().stack === 0;
-    $("rebuy-button").hidden = !broke;
+    const self = playerSelf();
+    const canPracticeRebuy = practice && self?.stack === 0;
+    const canCashTopUp = !practice && state.mode !== "tournament" && self && self.stack < (state.maxBuyIn || state.buyIn);
+    const canRebuy = !playing && (canPracticeRebuy || canCashTopUp);
+    $("rebuy-button").hidden = !canRebuy;
     $("rebuy-button").disabled = pending || !socketConnected();
     $("rebuy-button").innerHTML = practice
       ? '<i data-lucide="coins"></i>补充筹码'
-      : '<i data-lucide="gift"></i>领取每日补助';
+      : '<i data-lucide="coins"></i>补充桌上筹码';
     $("quick-start").hidden = spectator || playing || !host;
     $("quick-start").disabled = $("start-button").disabled;
     $("quick-start").querySelector("span").textContent = $("start-label").textContent;
     $("quick-rebuy").hidden = $("rebuy-button").hidden;
     $("quick-rebuy").disabled = $("rebuy-button").disabled;
-    $("quick-rebuy").querySelector("span").textContent = practice ? "补充筹码" : "领取每日补助";
+    $("quick-rebuy").querySelector("span").textContent = practice ? "补充筹码" : "补充桌上筹码";
     $("quick-invite").hidden = state.phase !== "lobby";
     $("room-wait").textContent = spectator
       ? "观战中"
@@ -758,18 +835,53 @@
     if (state?.canShowCards) await exclusive("game:show-cards", { handNumber: state.handNumber });
   });
   $("rebuy-button").addEventListener("click", async () => {
-    if (state?.practice) {
-      await exclusive("room:rebuy", {});
-      renderRoom();
-      icons();
-    } else {
-      await claimSubsidy();
-      renderRoom();
-      icons();
-    }
+    await openRebuyDialog();
+    renderRoom();
+    icons();
   });
   $("quick-start").addEventListener("click", () => $("start-button").click());
   $("quick-rebuy").addEventListener("click", () => $("rebuy-button").click());
+  $("close-rebuy").addEventListener("click", closeRebuyDialog);
+  $("cancel-rebuy").addEventListener("click", closeRebuyDialog);
+  $("rebuy-dialog").addEventListener("click", event => {
+    if (event.target === $("rebuy-dialog")) closeRebuyDialog();
+  });
+  $("rebuy-amount").addEventListener("input", updateRebuyNote);
+  $("rebuy-subsidy").addEventListener("click", async () => {
+    closeRebuyDialog();
+    await claimSubsidy();
+    renderRoom();
+    icons();
+  });
+  document.querySelectorAll("[data-rebuy-preset]").forEach(button => {
+    button.addEventListener("click", () => {
+      const limits = rebuyLimits();
+      if (!limits) return;
+      if (button.dataset.rebuyPreset === "max") setRebuyAmount(limits.maximum);
+      else setRebuyAmount(Math.min(limits.maximum, Math.max(limits.minimum, state.buyIn - limits.self.stack)));
+    });
+  });
+  $("rebuy-form").addEventListener("submit", async event => {
+    event.preventDefault();
+    const limits = rebuyLimits();
+    const amount = Number($("rebuy-amount").value);
+    if (!limits || !Number.isSafeInteger(amount) || amount < limits.minimum || amount > limits.maximum) {
+      $("rebuy-error").textContent = limits?.maximum < limits?.minimum
+        ? `钱包余额不足，至少需要转入 ${money(limits.minimum)} 筹码`
+        : `请输入 ${money(limits?.minimum || 1)}–${money(limits?.maximum || 0)} 之间的整数`;
+      $("rebuy-error").hidden = false;
+      return;
+    }
+    $("confirm-rebuy").disabled = true;
+    const response = await exclusive("room:rebuy", { amount });
+    if (!response) {
+      $("confirm-rebuy").disabled = false;
+      return;
+    }
+    closeRebuyDialog();
+    await refreshAccountBalance();
+    toast(`已从钱包转入 ${money(amount)} 筹码`);
+  });
   $("quick-invite").addEventListener("click", copyInvite);
   async function leaveRoom() {
     if (await exclusive("room:leave", {})) {

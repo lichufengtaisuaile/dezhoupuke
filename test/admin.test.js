@@ -77,6 +77,8 @@ test('admin api without adminToken returns 503, wrong token returns 401', async 
   for (const [method, url, body] of [
     ['GET', '/api/admin/users?page=1', undefined],
     ['GET', '/api/admin/audit?page=1', undefined],
+    ['GET', '/api/admin/broadcast-reward/recipients', undefined],
+    ['POST', '/api/admin/broadcast-reward', { amount: 1, reason: 'x', requestId: 'missing-admin-0001' }],
     ['POST', '/api/admin/users/x/adjust', { amount: 1, reason: 'x' }],
     ['POST', '/api/admin/users/x/ban', { banned: true }],
   ]) {
@@ -89,6 +91,55 @@ test('admin api without adminToken returns 503, wrong token returns 401', async 
   // 普通功能不受影响。
   const login = await api(server.port, 'POST', '/api/login', { body: { name: 'plain', password: 'secret123' } });
   assert.equal(login.status, 200);
+});
+
+test('admin broadcast: grants normal players atomically, excludes NPC/banned accounts, and replays by request id', async (t) => {
+  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:', adminToken: ADMIN_TOKEN, npcTables: 0 });
+  t.after(async () => { await server.close(); });
+  const alice = (await api(server.port, 'POST', '/api/register', { body: { name: 'grant-alice', password: 'secret123' } })).json;
+  const bob = (await api(server.port, 'POST', '/api/register', { body: { name: 'grant-bob', password: 'secret123' } })).json;
+  const banned = (await api(server.port, 'POST', '/api/register', { body: { name: 'grant-banned', password: 'secret123' } })).json;
+  const npc = (await api(server.port, 'POST', '/api/register', { body: { name: 'grant-npc', password: 'secret123' } })).json;
+  server.db.prepare('UPDATE accounts SET is_banned = 1 WHERE id = ?').run(banned.accountId);
+  server.db.prepare('UPDATE accounts SET npc = 1 WHERE id = ?').run(npc.accountId);
+
+  const before = await admin(server.port, 'GET', '/api/admin/broadcast-reward/recipients');
+  assert.equal(before.status, 200);
+  assert.equal(before.json.recipientCount, 2);
+  const body = { amount: 250, reason: '周末福利', requestId: 'broadcast-test-0001' };
+  const granted = await admin(server.port, 'POST', '/api/admin/broadcast-reward', { body });
+  assert.equal(granted.status, 200);
+  assert.equal(granted.json.recipientCount, 2);
+  assert.equal(granted.json.totalAmount, 500);
+  assert.equal(granted.json.replayed, false);
+  assert.equal(wallet.balanceOf(server.db, alice.accountId), 10250);
+  assert.equal(wallet.balanceOf(server.db, bob.accountId), 10250);
+  assert.equal(wallet.balanceOf(server.db, banned.accountId), 10000);
+  assert.equal(wallet.balanceOf(server.db, npc.accountId), 10000);
+
+  const replayed = await admin(server.port, 'POST', '/api/admin/broadcast-reward', { body });
+  assert.equal(replayed.status, 200);
+  assert.equal(replayed.json.replayed, true);
+  assert.equal(wallet.balanceOf(server.db, alice.accountId), 10250, 'replayed request must not pay twice');
+  const ledgers = server.db.prepare("SELECT account_id, amount, ref_type, ref_id FROM ledger WHERE ref_type = 'admin-broadcast' ORDER BY account_id").all();
+  assert.equal(ledgers.length, 2);
+  assert.ok(ledgers.every((entry) => entry.amount === 250 && /^audit-\d+$/.test(entry.ref_id)));
+  const audit = (await admin(server.port, 'GET', '/api/admin/audit?page=1')).json;
+  assert.equal(audit.entries[0].action, 'BROADCAST_GRANT');
+  assert.equal(audit.entries[0].targetAccountId, '*');
+  assert.deepEqual(audit.entries[0].detail, { amount: 250, reason: '周末福利', recipientCount: 2, totalAmount: 500, requestId: 'broadcast-test-0001' });
+
+  for (const invalid of [
+    { amount: 0, reason: 'x', requestId: 'broadcast-test-0002' },
+    { amount: -1, reason: 'x', requestId: 'broadcast-test-0003' },
+    { amount: 1.5, reason: 'x', requestId: 'broadcast-test-0004' },
+    { amount: 1, reason: ' ', requestId: 'broadcast-test-0005' },
+    { amount: 1, reason: 'x', requestId: 'bad' },
+  ]) {
+    const rejected = await admin(server.port, 'POST', '/api/admin/broadcast-reward', { body: invalid });
+    assert.equal(rejected.status, 400, JSON.stringify(invalid));
+  }
+  assert.equal(server.db.prepare('SELECT COUNT(*) AS count FROM admin_broadcasts').get().count, 1);
 });
 
 test('admin users list carries stats and supports name search', async (t) => {

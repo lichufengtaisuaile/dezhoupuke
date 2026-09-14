@@ -4,6 +4,7 @@ import { hasMahjongTable, tableAssets } from './stats.js';
 
 export const ADMIN_PAGE_SIZE = 20;
 const AUDIT_ADMIN = 'token';
+export const BROADCAST_MAX_AMOUNT = 1_000_000;
 
 // ---------- 用户列表（含战绩统计） ----------
 
@@ -81,6 +82,45 @@ export function adjustBalance(db, accountId, amount, reason) {
     const auditId = writeAudit(db, 'ADJUST_BALANCE', accountId, { amount, reason: trimmed });
     credit(db, accountId, 'ADMIN_ADJUST', amount, 'admin', `audit-${auditId}`);
     return { accountId, name: account.name, balance: balanceOf(db, accountId), auditId };
+  })();
+}
+
+// 全服发放只面向正常的真人账号：封禁账号和系统 NPC 不参与。
+// requestId 由后台生成，写入批次表；网络重试同一个 requestId 时只回放原结果。
+export function broadcastRecipients(db) {
+  return Number(db.prepare(`SELECT COUNT(*) AS count FROM accounts a JOIN wallets w ON w.account_id = a.id
+    WHERE a.is_banned = 0 AND a.npc = 0`).get().count);
+}
+
+export function broadcastGrant(db, amount, reason, requestId) {
+  requireThat(Number.isSafeInteger(amount) && amount > 0, '发放金额需要是正整数');
+  requireThat(amount <= BROADCAST_MAX_AMOUNT, `单人发放金额不能超过 ${BROADCAST_MAX_AMOUNT.toLocaleString('zh-CN')}`);
+  const trimmed = typeof reason === 'string' ? reason.trim() : '';
+  requireThat(trimmed.length > 0, '请填写发放原因');
+  requireThat([...trimmed].length <= 100, '发放原因最多 100 个字');
+  requireThat(typeof requestId === 'string' && /^[A-Za-z0-9_-]{8,100}$/.test(requestId), '发放请求编号不正确');
+
+  return db.transaction(() => {
+    const existing = db.prepare(`SELECT audit_id AS auditId, amount, reason,
+      recipient_count AS recipientCount, total_amount AS totalAmount FROM admin_broadcasts WHERE request_id = ?`).get(requestId);
+    if (existing) return { ...existing, replayed: true };
+
+    const recipients = db.prepare(`SELECT a.id FROM accounts a JOIN wallets w ON w.account_id = a.id
+      WHERE a.is_banned = 0 AND a.npc = 0 ORDER BY a.id`).all();
+    requireThat(recipients.length > 0, '当前没有可发放的普通账号');
+    const totalAmount = amount * recipients.length;
+    requireThat(Number.isSafeInteger(totalAmount), '本次发放总额过大');
+    const auditId = writeAudit(db, 'BROADCAST_GRANT', '*', {
+      amount, reason: trimmed, recipientCount: recipients.length, totalAmount, requestId,
+    });
+    for (const recipient of recipients) {
+      credit(db, recipient.id, 'ADMIN_ADJUST', amount, 'admin-broadcast', `audit-${auditId}`);
+    }
+    db.prepare(`INSERT INTO admin_broadcasts
+      (request_id, audit_id, amount, reason, recipient_count, total_amount, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run(requestId, auditId, amount, trimmed, recipients.length, totalAmount, Date.now());
+    return { auditId, amount, reason: trimmed, recipientCount: recipients.length, totalAmount, replayed: false };
   })();
 }
 

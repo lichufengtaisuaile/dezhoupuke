@@ -39,6 +39,22 @@
 }
 .admin-gate-error { margin: 12px 0 0; font-size: 12px; color: var(--red); }
 
+.admin-broadcast {
+  margin-bottom: 26px;
+  padding: 16px;
+  border: 1px solid #756039;
+  border-radius: 8px;
+  background: #3a301b66;
+}
+.admin-broadcast-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.admin-broadcast-head h2 { margin: 0; color: #f0d68c; font-size: 16px; }
+.admin-broadcast-head p { max-width: 680px; margin: 6px 0 0; color: #b9aa7c; font-size: 12px; line-height: 1.6; }
+.admin-broadcast-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px; margin-top: 14px; }
+.admin-broadcast-form label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: #d6c496; }
+.admin-broadcast-form input { width: 168px; height: 36px; padding: 0 10px; background: #1c1b16; border: 1px solid #685d3d; border-radius: 6px; color: var(--text); }
+.admin-broadcast-form label:nth-child(2) input { width: min(360px, 70vw); }
+.admin-broadcast-form .button { min-height: 36px; }
+
 .admin-toolbar {
   display: flex;
   align-items: center;
@@ -203,6 +219,9 @@
   .admin-shell { padding: 18px 14px 46px; }
   .admin-gate { margin: 30px auto; padding: 20px 16px; }
   .admin-gate-row { flex-direction: column; }
+  .admin-broadcast-head { flex-direction: column; gap: 7px; }
+  .admin-broadcast-form { align-items: stretch; }
+  .admin-broadcast-form label, .admin-broadcast-form input, .admin-broadcast-form label:nth-child(2) input { width: 100%; }
 }
 
 .admin-npc { margin-bottom: 26px; }

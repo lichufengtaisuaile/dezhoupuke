@@ -34,6 +34,22 @@
 
       <!-- 主面板 -->
       <main id="panel" hidden>
+        <section class="admin-broadcast" aria-labelledby="broadcastTitle">
+          <div class="admin-broadcast-head">
+            <div>
+              <h2 id="broadcastTitle">全服发放筹码</h2>
+              <p>发给所有正常的普通账号；封禁账号和系统 NPC 不参与。操作会写入审计与每位用户的筹码明细。</p>
+            </div>
+            <span class="admin-count" id="broadcastRecipients">正在读取领取人数…</span>
+          </div>
+          <form id="broadcastForm" class="admin-broadcast-form">
+            <label>每人金额 <input id="broadcastAmount" type="number" min="1" max="1000000" step="1" inputmode="numeric" required /></label>
+            <label>发放原因 <input id="broadcastReason" type="text" maxlength="100" required /></label>
+            <button type="submit" class="button primary" id="broadcastSubmit">发放筹码</button>
+          </form>
+          <p class="admin-gate-error" id="broadcastError" role="alert" hidden></p>
+        </section>
+
         <section class="admin-npc">
           <div class="admin-npc-head">
             <h2>氛围桌</h2>

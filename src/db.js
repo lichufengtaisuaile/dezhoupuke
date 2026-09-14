@@ -110,6 +110,19 @@ CREATE TABLE IF NOT EXISTS admin_audit (
 );
 CREATE INDEX IF NOT EXISTS idx_admin_audit_time ON admin_audit(id);
 
+-- 全服发放批次：request_id 是后台客户端生成的幂等键。
+-- 一次批次只对应一条审计和每名领取者一条 ADMIN_ADJUST 流水。
+CREATE TABLE IF NOT EXISTS admin_broadcasts (
+  request_id TEXT PRIMARY KEY,
+  audit_id INTEGER NOT NULL REFERENCES admin_audit(id),
+  amount INTEGER NOT NULL,
+  reason TEXT NOT NULL,
+  recipient_count INTEGER NOT NULL,
+  total_amount INTEGER NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_admin_broadcasts_audit ON admin_broadcasts(audit_id);
+
 -- 氛围桌（NPC 常驻桌）配置：管理后台增删改，heal 巡检按行 reconcile。
 -- max_seats 2-6；keep_vacant 永远留给真人的空位数；enabled 停用后 NPC 撤出、房间清除。
 CREATE TABLE IF NOT EXISTS npc_table_configs (

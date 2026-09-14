@@ -21,6 +21,12 @@
     npcKeepVacant: $("npcKeepVacant"),
     npcBody: $("npcBody"),
     npcEmpty: $("npcEmpty"),
+    broadcastForm: $("broadcastForm"),
+    broadcastAmount: $("broadcastAmount"),
+    broadcastReason: $("broadcastReason"),
+    broadcastRecipients: $("broadcastRecipients"),
+    broadcastSubmit: $("broadcastSubmit"),
+    broadcastError: $("broadcastError"),
     searchInput: $("searchInput"),
     usersCount: $("usersCount"),
     usersBody: $("usersBody"),
@@ -45,6 +51,7 @@
   let usersCurrentPage = 1;
   let auditCurrentPage = 1;
   let adjustUserId = null;
+  let broadcastRequestId = null;
   let toastTimer = null;
 
   function fmtMoney(value) {
@@ -87,6 +94,10 @@
     }
     return data;
   }
+  function requestId() {
+    if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+  }
 
   // ---------- 令牌门 ----------
   function showGate(message) {
@@ -115,7 +126,7 @@
       sessionStorage.setItem(TOKEN_KEY, token);
       showPanel();
       startNpcPolling();
-      await Promise.all([loadUsers(), loadAudit(1), loadNpcTables()]);
+      await Promise.all([loadUsers(), loadAudit(1), loadNpcTables(), loadBroadcastRecipients()]);
     } catch (error) {
       sessionStorage.removeItem(TOKEN_KEY);
       token = "";
@@ -127,6 +138,50 @@
     token = "";
     elements.tokenInput.value = "";
     showGate();
+  });
+
+  // ---------- 全服发放 ----------
+  async function loadBroadcastRecipients() {
+    try {
+      const data = await adminApi("/api/admin/broadcast-reward/recipients");
+      elements.broadcastRecipients.textContent = `预计 ${fmtMoney(data.recipientCount)} 位普通账号领取`;
+      return data.recipientCount;
+    } catch (error) {
+      elements.broadcastRecipients.textContent = "领取人数读取失败";
+      throw error;
+    }
+  }
+  elements.broadcastForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const amount = Number(elements.broadcastAmount.value);
+    const reason = elements.broadcastReason.value.trim();
+    elements.broadcastError.hidden = true;
+    if (!Number.isSafeInteger(amount) || amount <= 0 || !reason) {
+      elements.broadcastError.textContent = "请填写正整数金额和发放原因";
+      elements.broadcastError.hidden = false;
+      return;
+    }
+    try {
+      const recipientCount = await loadBroadcastRecipients();
+      if (!recipientCount) throw new Error("当前没有可发放的普通账号");
+      const total = amount * recipientCount;
+      if (!window.confirm(`确认向 ${fmtMoney(recipientCount)} 位普通账号各发放 ${fmtMoney(amount)} 筹码？\n总计 ${fmtMoney(total)} 筹码。\n\n封禁账号和系统 NPC 不参与。`)) return;
+      broadcastRequestId ||= requestId();
+      elements.broadcastSubmit.disabled = true;
+      const result = await adminApi("/api/admin/broadcast-reward", {
+        method: "POST",
+        body: JSON.stringify({ amount, reason, requestId: broadcastRequestId }),
+      });
+      elements.broadcastForm.reset();
+      broadcastRequestId = null;
+      toast(`${result.replayed ? "已确认原批次：" : "已发放："}${fmtMoney(result.recipientCount)} 人，各 ${fmtMoney(result.amount)}，总计 ${fmtMoney(result.totalAmount)}`);
+      await Promise.all([loadUsers(usersCurrentPage), loadAudit(1), loadBroadcastRecipients()]);
+    } catch (error) {
+      elements.broadcastError.textContent = error.message;
+      elements.broadcastError.hidden = false;
+    } finally {
+      elements.broadcastSubmit.disabled = false;
+    }
   });
 
   // ---------- 氛围桌 ----------
@@ -337,11 +392,14 @@
   }
 
   // ---------- 审计日志 ----------
-  const ACTION_NAMES = { ADJUST_BALANCE: "调资金", BAN: "封禁", UNBAN: "解封" };
+  const ACTION_NAMES = { ADJUST_BALANCE: "调资金", BROADCAST_GRANT: "全服发放", BAN: "封禁", UNBAN: "解封" };
   function auditText(entry) {
     const detail = entry.detail || {};
     if (entry.action === "ADJUST_BALANCE") {
       return `金额 ${detail.amount > 0 ? "+" : "−"}${fmtMoney(Math.abs(detail.amount))} · ${esc(detail.reason || "—")}`;
+    }
+    if (entry.action === "BROADCAST_GRANT") {
+      return `每人 +${fmtMoney(detail.amount)} · ${fmtMoney(detail.recipientCount)} 人 · 合计 +${fmtMoney(detail.totalAmount)} · ${esc(detail.reason || "—")}`;
     }
     return esc(detail.reason || (detail.banned ? "封禁" : "解封"));
   }
@@ -355,7 +413,7 @@
         <li>
           <time>${fmtTime(entry.time)}</time>
           <span class="admin-audit-action${entry.action === "BAN" ? " is-ban" : ""}">${ACTION_NAMES[entry.action] || esc(entry.action)}</span>
-          <span class="admin-name">${esc(entry.targetName || "（已删除）")}</span>
+          <span class="admin-name">${entry.action === "BROADCAST_GRANT" ? "全服普通账号" : esc(entry.targetName || "（已删除）")}</span>
           <span class="admin-audit-detail">${auditText(entry)}</span>
         </li>`).join("");
       renderPager(elements.auditPager, { page: data.page, pageSize: data.pageSize, total: data.total, onPage: loadAudit });
@@ -371,7 +429,7 @@
       await adminApi("/api/admin/users?page=1");
       showPanel();
       startNpcPolling();
-      await Promise.all([loadUsers(), loadAudit(1), loadNpcTables()]);
+      await Promise.all([loadUsers(), loadAudit(1), loadNpcTables(), loadBroadcastRecipients()]);
     } catch (error) {
       sessionStorage.removeItem(TOKEN_KEY);
       token = "";

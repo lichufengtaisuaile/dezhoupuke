@@ -182,6 +182,17 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       res.json({ ok: true, ...adminOps.adjustBalance(db, req.params.id, req.body?.amount, req.body?.reason) });
     } catch (error) { apiError(res, error); }
   });
+  app.get('/api/admin/broadcast-reward/recipients', (req, res) => {
+    if (!bearerAdmin(req, res)) return;
+    try { res.json({ ok: true, recipientCount: adminOps.broadcastRecipients(db) }); }
+    catch (error) { apiError(res, error); }
+  });
+  app.post('/api/admin/broadcast-reward', (req, res) => {
+    if (!bearerAdmin(req, res)) return;
+    try {
+      res.json({ ok: true, ...adminOps.broadcastGrant(db, req.body?.amount, req.body?.reason, req.body?.requestId) });
+    } catch (error) { apiError(res, error); }
+  });
   app.post('/api/admin/users/:id/ban', (req, res) => {
     if (!bearerAdmin(req, res)) return;
     try {

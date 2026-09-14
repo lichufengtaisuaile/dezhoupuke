@@ -632,7 +632,7 @@
         const tableMemo = entry.type === "MAHJONG_SETTLE" || entry.type === "HAND_WIN";
         return `<li class="profile-ledger">
           <div class="profile-ledger-main">
-            <span class="profile-ledger-type${transfer ? " is-transfer" : ""}">${esc(LEDGER_TYPES[entry.type] || entry.type)}</span>
+            <span class="profile-ledger-type${transfer ? " is-transfer" : ""}">${esc(entry.type === "ADMIN_ADJUST" && entry.refType === "admin-broadcast" ? "全服发放" : (LEDGER_TYPES[entry.type] || entry.type))}</span>
             <time>${esc(fmtTime(entry.createdAt ?? entry.time))}</time>
             ${tableMemo ? '<span class="profile-ledger-note">输赢发生在桌上，未重复增减钱包</span>' : ""}
           </div>

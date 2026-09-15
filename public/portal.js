@@ -31,6 +31,13 @@
       description: "2–8 人经典对局，默认开启 235 吃豹子",
       available: true,
     },
+    {
+      id: "treasure",
+      name: "头像宝箱",
+      icon: "package-open",
+      description: "5,000 筹码开启一次，收藏头像并在交易行自由买卖",
+      available: true,
+    },
   ];
 
   window.createPortal = function ({ root, onEnterGame, onReturnToTable }) {
@@ -74,6 +81,7 @@
           <div class="portal-game-icon">${icon(game.icon)}</div>
           <div class="portal-game-info"><h2>${esc(game.name)}</h2><p>${esc(game.description)}</p>
             ${game.id === "holdem" ? `<span class="portal-game-online" data-portal="holdem-online" ${online === null ? "hidden" : ""}></span>` : ""}
+            ${game.id === "treasure" ? `<span class="portal-game-online">${icon("sparkles")}头像中奖率 10%</span>` : ""}
           </div>
           <span class="portal-game-go">${icon("chevron-right")}</span>
         </button>`;

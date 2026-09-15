@@ -98,6 +98,10 @@
         location.assign("/zjh/");
         return;
       }
+      if (id === "treasure") {
+        location.assign("/treasure/");
+        return;
+      }
       if (id !== "holdem") return;
       if (!(await requireAuth())) return;
       location.hash = "#/holdem";

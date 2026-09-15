@@ -76,6 +76,15 @@ export function authenticate(db, token) {
 
 export function updateAvatar(db, accountId, avatar) {
   requireThat(globalThis.TONGZHUO_AVATARS.isValid(avatar), '请选择列表中的头像');
+  if (globalThis.TONGZHUO_AVATARS.isPrize(avatar)) {
+    requireThat(Boolean(db.prepare(`SELECT 1 FROM avatar_items i
+      WHERE i.owner_account_id = ? AND i.avatar_id = ?
+      AND NOT EXISTS (
+        SELECT 1 FROM avatar_market_listings l
+        WHERE l.item_id = i.id AND l.status = 'ACTIVE'
+      )
+      LIMIT 1`).get(accountId, avatar)), '这个头像不在可用库存中');
+  }
   const result = db.prepare('UPDATE accounts SET avatar = ? WHERE id = ?').run(avatar, accountId);
   requireThat(result.changes === 1, '账号不存在');
   return avatar;

@@ -13,6 +13,9 @@
     PRACTICE: "练习筹码",
     SLOT_BET: "老虎机下注",
     SLOT_WIN: "老虎机派奖",
+    TREASURE_OPEN: "开启头像宝箱",
+    MARKET_BUY: "交易行买入",
+    MARKET_SALE: "交易行卖出",
     MAHJONG_SETTLE: "麻将桌内输赢",
     ZJH_SETTLE: "炸金花桌内输赢",
     ADMIN_ADJUST: "管理员调整",
@@ -384,6 +387,11 @@
   let selectedAvatar = null;
   let savingAvatar = false;
   let avatarAccountToken = null;
+  let ownedPrizeAvatars = [];
+
+  function avatarOptionMarkup(item) {
+    return `<button type="button" class="avatar-option" data-avatar-id="${esc(item.id)}" aria-label="${esc(item.name)}" aria-pressed="false"><img src="${esc(item.src)}" width="64" height="64" alt="" draggable="false" /><span>${esc(item.name)}</span></button>`;
+  }
 
   function buildAvatarPicker() {
     if (avatarDialog) return;
@@ -393,10 +401,24 @@
     avatarDialog.innerHTML = `
       <div class="drawer-heading"><h2 id="avatar-dialog-title">更换头像</h2><button type="button" class="icon-button" data-avatar-close aria-label="关闭头像选择"><i data-lucide="x"></i></button></div>
       <div class="avatar-selection-preview"><img width="80" height="80" alt="头像预览" draggable="false" /><div><strong data-avatar-name></strong><span>在所有游戏中使用</span></div></div>
-      <div class="avatar-options" role="group" aria-label="动物头像">
-        ${window.tongzhuoAvatars.items.map(item => `<button type="button" class="avatar-option" data-avatar-id="${item.id}" aria-label="${item.name}" aria-pressed="false"><img src="${item.src}" width="64" height="64" alt="" draggable="false" /><span>${item.name}</span></button>`).join("")}
+      <section class="avatar-option-section">
+        <div class="avatar-option-heading"><strong>我的奖品头像</strong><a href="/treasure/">获取更多</a></div>
+        <div class="avatar-options" data-owned-avatar-options role="group" aria-label="我的奖品头像">
+          <p class="avatar-options-empty">正在加载库存…</p>
+        </div>
+      </section>
+      <section class="avatar-option-section">
+        <div class="avatar-option-heading"><strong>免费动物头像</strong></div>
+        <div class="avatar-options" role="group" aria-label="免费动物头像">
+          ${window.tongzhuoAvatars.freeItems.map(avatarOptionMarkup).join("")}
+        </div>
+      </section>
+      <div class="avatar-picker-footer">
+        <button type="button" class="avatar-default" data-avatar-default aria-pressed="false">恢复默认头像</button>
+        <p class="avatar-picker-error" data-avatar-error role="alert" hidden></p>
+        <button type="button" class="button primary full" data-avatar-save>保存头像</button>
       </div>
-      <div class="avatar-picker-footer"><button type="button" class="avatar-default" data-avatar-default aria-pressed="false">恢复默认头像</button><p class="avatar-picker-error" data-avatar-error role="alert" hidden></p><button type="button" class="button primary full" data-avatar-save>保存头像</button></div>`;
+      `;
     document.body.append(avatarDialog);
     avatarDialog.addEventListener("click", event => {
       if (savingAvatar) return;
@@ -415,6 +437,32 @@
     avatarDialog.addEventListener("close", () => {
       if (isProfileOpen()) drawer.querySelector("[data-profile-avatar]")?.focus();
     });
+  }
+
+  function renderOwnedAvatarOptions(message = "") {
+    const mount = avatarDialog?.querySelector("[data-owned-avatar-options]");
+    if (!mount) return;
+    mount.innerHTML = ownedPrizeAvatars.length
+      ? ownedPrizeAvatars.map(avatarOptionMarkup).join("")
+      : `<p class="avatar-options-empty">${esc(message || "还没有可用的奖品头像，开箱或交易后会显示在这里")}</p>`;
+  }
+
+  async function loadOwnedAvatarOptions(token) {
+    try {
+      const data = await api("/api/me/avatar-inventory");
+      if (!avatarDialog?.open || get()?.token !== token) return;
+      const unique = new Map();
+      for (const item of data.items || []) {
+        if (!item.listing && item.avatar?.id && !unique.has(item.avatar.id)) unique.set(item.avatar.id, item.avatar);
+      }
+      ownedPrizeAvatars = [...unique.values()];
+      renderOwnedAvatarOptions();
+      renderAvatarSelection();
+    } catch (error) {
+      if (!avatarDialog?.open || get()?.token !== token) return;
+      ownedPrizeAvatars = [];
+      renderOwnedAvatarOptions(error?.error || "奖品头像加载失败，请稍后重试");
+    }
   }
 
   function renderAvatarSelection() {
@@ -441,11 +489,14 @@
     buildAvatarPicker();
     selectedAvatar = window.tongzhuoAvatars.isValid(account.avatar) ? account.avatar : null;
     avatarAccountToken = account.token;
+    ownedPrizeAvatars = [];
+    renderOwnedAvatarOptions("正在加载库存…");
     avatarDialog.querySelector("[data-avatar-error]").hidden = true;
     renderAvatarSelection();
     avatarDialog.showModal();
     const target = selectedAvatar === null ? "[data-avatar-default]" : `[data-avatar-id="${selectedAvatar}"]`;
-    avatarDialog.querySelector(target)?.focus();
+    (avatarDialog.querySelector(target) || avatarDialog.querySelector("[data-avatar-close]"))?.focus();
+    void loadOwnedAvatarOptions(account.token);
     icons();
   }
 
@@ -792,6 +843,10 @@
   window.addEventListener("storage", event => {
     if (event.key !== AUTH_KEY) return;
     avatarRevision += 1;
+    ownedPrizeAvatars = [];
+    selectedAvatar = null;
+    avatarAccountToken = null;
+    if (avatarDialog?.open) avatarDialog.close();
     window.dispatchEvent(new CustomEvent("tongzhuo:profile"));
   });
 

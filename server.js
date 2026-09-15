@@ -13,6 +13,7 @@ import * as accounts from './src/account.js';
 import * as wallet from './src/wallet.js';
 import * as stats from './src/stats.js';
 import * as slot from './src/slot.js';
+import * as treasure from './src/treasure.js';
 import * as adminOps from './src/admin.js';
 import { decideBotAction, normalizeDifficulty } from './src/bot.js';
 import * as npc from './src/npc.js';
@@ -150,18 +151,72 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
     if (!account) return;
     try {
       const avatar = accounts.updateAvatar(db, account.id, req.body?.avatar);
-      for (const socket of io.sockets.sockets.values()) {
-        if (socket.data.account?.id !== account.id) continue;
-        socket.data.account.avatar = avatar;
-        socket.emit('account:avatar', { accountId: account.id, avatar });
-      }
-      for (const room of rooms.values()) {
-        if (room.players.some(player => player.accountId === account.id)) broadcast(room);
-      }
-      mahjong.updateAccountAvatar(account.id, avatar);
-      zjh.updateAccountAvatar(account.id, avatar);
+      syncAccountAvatar(account.id, avatar);
       res.json({ ok: true, avatar });
     } catch (error) { apiError(res, error); }
+  });
+  app.get('/api/treasure/config', (_req, res) => {
+    try { res.json({ ok: true, ...treasure.config() }); }
+    catch (error) { apiError(res, error); }
+  });
+  app.post('/api/treasure/open', (req, res) => {
+    const account = bearerAccount(req, res);
+    if (!account) return;
+    try { res.json({ ok: true, ...treasure.openBox(db, account.id, req.body?.openId) }); }
+    catch (error) { apiError(res, error); }
+  });
+  app.post('/api/treasure/open-ten', (req, res) => {
+    const account = bearerAccount(req, res);
+    if (!account) return;
+    try { res.json({ ok: true, ...treasure.openTen(db, account.id, req.body?.batchId) }); }
+    catch (error) { apiError(res, error); }
+  });
+  app.get('/api/me/avatar-inventory', (req, res) => {
+    const account = bearerAccount(req, res);
+    if (!account) return;
+    try { res.json({ ok: true, ...treasure.inventory(db, account.id) }); }
+    catch (error) { apiError(res, error); }
+  });
+  app.get('/api/me/treasure-history', (req, res) => {
+    const account = bearerAccount(req, res);
+    if (!account) return;
+    try { res.json({ ok: true, ...treasure.openHistory(db, account.id, Number(req.query.limit ?? 30)) }); }
+    catch (error) { apiError(res, error); }
+  });
+  app.get('/api/avatar-market/listings', (req, res) => {
+    try {
+      res.json({ ok: true, ...treasure.activeListings(db, {
+        avatarId: req.query.avatar ?? '',
+        limit: Number(req.query.limit ?? 100),
+      }) });
+    } catch (error) { apiError(res, error); }
+  });
+  app.post('/api/avatar-market/listings', (req, res) => {
+    const account = bearerAccount(req, res);
+    if (!account) return;
+    try { res.json({ ok: true, listing: treasure.createListing(db, account.id, req.body?.itemId, req.body?.price) }); }
+    catch (error) { apiError(res, error); }
+  });
+  app.delete('/api/avatar-market/listings/:id', (req, res) => {
+    const account = bearerAccount(req, res);
+    if (!account) return;
+    try { res.json({ ok: true, ...treasure.cancelListing(db, account.id, req.params.id) }); }
+    catch (error) { apiError(res, error); }
+  });
+  app.post('/api/avatar-market/listings/:id/buy', (req, res) => {
+    const account = bearerAccount(req, res);
+    if (!account) return;
+    try {
+      const result = treasure.buyListing(db, account.id, req.params.id);
+      if (result.sellerAvatarReset) syncAccountAvatar(result.sellerAccountId, null);
+      res.json({ ok: true, ...result });
+    } catch (error) { apiError(res, error); }
+  });
+  app.get('/api/me/avatar-market-history', (req, res) => {
+    const account = bearerAccount(req, res);
+    if (!account) return;
+    try { res.json({ ok: true, ...treasure.marketHistory(db, account.id, Number(req.query.limit ?? 50)) }); }
+    catch (error) { apiError(res, error); }
   });
   app.get('/api/me/hands', (req, res) => {
     const account = bearerAccount(req, res);
@@ -353,6 +408,7 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
   app.get(['/zjh', '/zjh/'], (_req, res) => res.sendFile(path.join(ROOT, 'public', 'zjh', 'index.html')));
   // 老虎机独立游戏页：/slot/ 与 /slot 都落到 slot.html（静态目录的默认索引是 index.html）。
   app.get(['/slot', '/slot/'], (_req, res) => res.sendFile(path.join(ROOT, 'public', 'slot', 'slot.html')));
+  app.get(['/treasure', '/treasure/'], (_req, res) => res.sendFile(path.join(ROOT, 'public', 'treasure', 'index.html')));
   // 管理员后台页（不进门户游戏卡片）。
   app.get(['/admin', '/admin/'], (_req, res) => res.sendFile(path.join(ROOT, 'public', 'admin', 'admin.html')));
   app.use(express.static(path.join(ROOT, 'public'), { etag: true, maxAge: 0 }));
@@ -413,6 +469,18 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
   function playerAvatars(room) {
     // Accounts are authoritative, including after reconnecting or restoring an old snapshot.
     return new Map(room.players.map(p => [p.id, p.accountId ? accountAvatar.get(p.accountId)?.avatar ?? null : null]));
+  }
+  function syncAccountAvatar(accountId, avatar) {
+    for (const socket of io.sockets.sockets.values()) {
+      if (socket.data.account?.id !== accountId) continue;
+      socket.data.account.avatar = avatar;
+      socket.emit('account:avatar', { accountId, avatar });
+    }
+    for (const room of rooms.values()) {
+      if (room.players.some(player => player.accountId === accountId)) broadcast(room);
+    }
+    mahjong?.updateAccountAvatar(accountId, avatar);
+    zjh?.updateAccountAvatar(accountId, avatar);
   }
   function snapshot(room, viewer, avatars = playerAvatars(room)) {
     const acting = isPlaying(room) && room.table.isBettingRoundInProgress();

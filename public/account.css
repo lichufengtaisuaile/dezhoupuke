@@ -351,7 +351,7 @@
 .portal-hero p { margin: 0; font-size: 13px; color: #93a598; }
 .portal-games {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
   margin-bottom: 30px;
 }
@@ -534,7 +534,29 @@ button.portal-game:hover { border-color: #728679; background: #252d2c; }
 .avatar-selection-preview > div { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
 .avatar-selection-preview strong { color: #e0eae3; font-size: 16px; overflow-wrap: anywhere; }
 .avatar-selection-preview span { color: #9aac9f; font-size: 12px; line-height: 1.5; }
+.avatar-option-section { margin-top: 18px; }
+.avatar-option-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 9px;
+}
+.avatar-option-heading strong { color: #dfe9e2; font-size: 13px; font-weight: 600; }
+.avatar-option-heading a { color: #d9c690; font-size: 12px; text-underline-offset: 3px; }
+.avatar-option-heading a:hover { color: #f0dfa9; }
 .avatar-options { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.avatar-options-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 14px;
+  border: 1px dashed #405047;
+  border-radius: 10px;
+  color: #91a398;
+  font-size: 12px;
+  line-height: 1.55;
+  text-align: center;
+}
 .avatar-option {
   position: relative;
   display: flex;

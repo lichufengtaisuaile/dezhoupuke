@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS wallets (
 CREATE TABLE IF NOT EXISTS ledger (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   account_id TEXT NOT NULL REFERENCES accounts(id),
-  type TEXT NOT NULL CHECK (type IN ('REGISTER_GRANT', 'SUBSIDY', 'BRING_IN', 'CASH_OUT', 'HAND_WIN', 'PRACTICE', 'SLOT_BET', 'SLOT_WIN', 'ADMIN_ADJUST', 'MAHJONG_SETTLE', 'ZJH_SETTLE')),
+  type TEXT NOT NULL CHECK (type IN ('REGISTER_GRANT', 'SUBSIDY', 'BRING_IN', 'CASH_OUT', 'HAND_WIN', 'PRACTICE', 'SLOT_BET', 'SLOT_WIN', 'ADMIN_ADJUST', 'MAHJONG_SETTLE', 'ZJH_SETTLE', 'TREASURE_OPEN', 'MARKET_BUY', 'MARKET_SALE')),
   amount INTEGER NOT NULL,
   balance_after INTEGER NOT NULL,
   ref_type TEXT,
@@ -56,6 +56,49 @@ CREATE TABLE IF NOT EXISTS spins (
   PRIMARY KEY (id)
 );
 CREATE INDEX IF NOT EXISTS idx_spins_account ON spins(account_id, created_at DESC, id DESC);
+
+-- 头像宝箱：open_id 由客户端生成，重复提交只回放首次开奖结果。
+CREATE TABLE IF NOT EXISTS treasure_opens (
+  id TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL REFERENCES accounts(id),
+  cost INTEGER NOT NULL,
+  won INTEGER NOT NULL DEFAULT 0,
+  avatar_id TEXT,
+  item_id TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_treasure_opens_account ON treasure_opens(account_id, created_at DESC, id DESC);
+
+-- 每一份抽中的头像都是可交易的独立物品；前端可按 avatar_id 合并展示数量。
+CREATE TABLE IF NOT EXISTS avatar_items (
+  id TEXT PRIMARY KEY,
+  avatar_id TEXT NOT NULL,
+  owner_account_id TEXT NOT NULL REFERENCES accounts(id),
+  source_open_id TEXT REFERENCES treasure_opens(id),
+  acquired_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_avatar_items_owner ON avatar_items(owner_account_id, avatar_id, acquired_at DESC);
+
+-- 固定价格交易行。ACTIVE 订单锁定对应物品；成交后物品所有权转给买家。
+CREATE TABLE IF NOT EXISTS avatar_market_listings (
+  id TEXT PRIMARY KEY,
+  item_id TEXT NOT NULL REFERENCES avatar_items(id),
+  seller_account_id TEXT NOT NULL REFERENCES accounts(id),
+  buyer_account_id TEXT REFERENCES accounts(id),
+  price INTEGER NOT NULL,
+  fee INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'SOLD', 'CANCELLED')),
+  created_at INTEGER NOT NULL,
+  settled_at INTEGER
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_avatar_market_active_item
+  ON avatar_market_listings(item_id) WHERE status = 'ACTIVE';
+CREATE INDEX IF NOT EXISTS idx_avatar_market_active_price
+  ON avatar_market_listings(status, price, created_at);
+CREATE INDEX IF NOT EXISTS idx_avatar_market_seller
+  ON avatar_market_listings(seller_account_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_avatar_market_buyer
+  ON avatar_market_listings(buyer_account_id, settled_at DESC);
 
 CREATE TABLE IF NOT EXISTS hands (
   id TEXT PRIMARY KEY,
@@ -183,7 +226,7 @@ function migrateAccounts(db) {
 // SQLite 不能修改 CHECK 约束：凡是 ledger.type 的 CHECK 不含最新类型集合的库
 // （最早六种、加老虎机后的八种）都按"建新表 → 按列名拷贝 → 删旧表 → 改名"重建，数据无损。
 // 注意：ledger 各历史版本的列集相同，按列名拷贝即可；外键约束临时关闭。
-const LEDGER_TYPES = ['REGISTER_GRANT', 'SUBSIDY', 'BRING_IN', 'CASH_OUT', 'HAND_WIN', 'PRACTICE', 'SLOT_BET', 'SLOT_WIN', 'ADMIN_ADJUST', 'MAHJONG_SETTLE', 'ZJH_SETTLE'];
+const LEDGER_TYPES = ['REGISTER_GRANT', 'SUBSIDY', 'BRING_IN', 'CASH_OUT', 'HAND_WIN', 'PRACTICE', 'SLOT_BET', 'SLOT_WIN', 'ADMIN_ADJUST', 'MAHJONG_SETTLE', 'ZJH_SETTLE', 'TREASURE_OPEN', 'MARKET_BUY', 'MARKET_SALE'];
 
 function migrateLedger(db) {
   const table = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'ledger'").get();

@@ -25,10 +25,10 @@
       available: true,
     },
     {
-      id: "kawuxing",
-      name: "卡五星",
-      icon: "grid-3x3",
-      description: "湖北卡五星，赖子百搭",
+      id: "zjh",
+      name: "炸金花",
+      icon: "club",
+      description: "2–8 人经典对局，默认开启 235 吃豹子",
       available: false,
     },
   ];

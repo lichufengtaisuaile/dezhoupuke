@@ -61,9 +61,10 @@
   function cardMarkup(card, small = false) {
     if (!card) return `<span class="${small ? "zjh-card-back" : "zjh-own-card back"}" aria-label="暗牌"></span>`;
     const red = redSuits.has(card.suit) ? " red" : "";
+    const rank = card.rank === "T" ? "10" : card.rank;
     return small
-      ? `<span class="zjh-mini-card${red}" aria-label="${esc(card.rank)}${suits[card.suit]}">${esc(card.rank)}${suits[card.suit]}</span>`
-      : `<span class="zjh-own-card${red}" aria-label="${esc(card.rank)}${suits[card.suit]}"><b>${esc(card.rank)}</b><i>${suits[card.suit]}</i></span>`;
+      ? `<span class="zjh-mini-card${red}" aria-label="${esc(rank)}${suits[card.suit]}">${esc(rank)}${suits[card.suit]}</span>`
+      : `<span class="zjh-own-card${red}" aria-label="${esc(rank)}${suits[card.suit]}"><b>${esc(rank)}</b><i>${suits[card.suit]}</i></span>`;
   }
 
   async function refreshBalance() {

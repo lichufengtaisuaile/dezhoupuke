@@ -216,13 +216,24 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
     if (!bearerAdmin(req, res)) return;
     try {
       const page = Number(req.query.page ?? 1);
-      res.json({ ok: true, ...adminOps.usersPage(db, rooms, { q: req.query.q ?? '', page }) });
+      res.json({ ok: true, ...adminOps.usersPage(db, rooms, {
+        q: req.query.q ?? '',
+        page,
+        sort: req.query.sort ?? 'createdAt',
+        order: req.query.order ?? 'desc',
+      }) });
     } catch (error) { apiError(res, error); }
   });
   app.post('/api/admin/users/:id/adjust', (req, res) => {
     if (!bearerAdmin(req, res)) return;
     try {
       res.json({ ok: true, ...adminOps.adjustBalance(db, req.params.id, req.body?.amount, req.body?.reason) });
+    } catch (error) { apiError(res, error); }
+  });
+  app.post('/api/admin/users/:id/password', (req, res) => {
+    if (!bearerAdmin(req, res)) return;
+    try {
+      res.json({ ok: true, ...adminOps.resetPassword(db, req.params.id, req.body?.password) });
     } catch (error) { apiError(res, error); }
   });
   app.get('/api/admin/broadcast-reward/recipients', (req, res) => {

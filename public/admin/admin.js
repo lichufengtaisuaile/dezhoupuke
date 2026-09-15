@@ -28,6 +28,8 @@
     broadcastSubmit: $("broadcastSubmit"),
     broadcastError: $("broadcastError"),
     searchInput: $("searchInput"),
+    sortSelect: $("sortSelect"),
+    orderSelect: $("orderSelect"),
     usersCount: $("usersCount"),
     usersBody: $("usersBody"),
     usersEmpty: $("usersEmpty"),
@@ -43,6 +45,13 @@
     adjustReason: $("adjustReason"),
     adjustError: $("adjustError"),
     adjustCancel: $("adjustCancel"),
+    passwordDialog: $("passwordDialog"),
+    passwordForm: $("passwordForm"),
+    passwordTarget: $("passwordTarget"),
+    passwordValue: $("passwordValue"),
+    passwordConfirm: $("passwordConfirm"),
+    passwordError: $("passwordError"),
+    passwordCancel: $("passwordCancel"),
     toast: $("toast"),
   };
 
@@ -51,6 +60,7 @@
   let usersCurrentPage = 1;
   let auditCurrentPage = 1;
   let adjustUserId = null;
+  let passwordUserId = null;
   let broadcastRequestId = null;
   let toastTimer = null;
 
@@ -302,8 +312,10 @@
   // ---------- 用户列表 ----------
   async function loadUsers(page = 1) {
     const q = elements.searchInput.value.trim();
+    const sort = elements.sortSelect.value;
+    const order = elements.orderSelect.value;
     try {
-      const data = await adminApi(`/api/admin/users?page=${page}&q=${encodeURIComponent(q)}`);
+      const data = await adminApi(`/api/admin/users?page=${page}&q=${encodeURIComponent(q)}&sort=${encodeURIComponent(sort)}&order=${encodeURIComponent(order)}`);
       usersCurrentPage = data.page;
       elements.usersCount.textContent = `共 ${data.total} 位用户`;
       elements.usersEmpty.hidden = data.users.length > 0;
@@ -321,6 +333,7 @@
           <td>
             <div class="admin-actions">
               <button type="button" class="button secondary" data-action="adjust">调资金</button>
+              <button type="button" class="button secondary" data-action="password">改密码</button>
               <button type="button" class="button ${user.isBanned ? "secondary" : "primary"}" data-action="ban">${user.isBanned ? "解封" : "封禁"}</button>
             </div>
           </td>
@@ -336,6 +349,8 @@
     clearTimeout(searchTimer);
     searchTimer = setTimeout(loadUsers, 300);
   });
+  elements.sortSelect.addEventListener("change", () => loadUsers(1));
+  elements.orderSelect.addEventListener("change", () => loadUsers(1));
 
   // ---------- 行操作 ----------
   elements.usersBody.addEventListener("click", async (event) => {
@@ -345,6 +360,7 @@
     const userId = row?.dataset.userId;
     if (!userId) return;
     if (button.dataset.action === "adjust") openAdjust(userId, row);
+    else if (button.dataset.action === "password") openPassword(userId, row);
     else await toggleBan(userId, row, button);
   });
 
@@ -376,6 +392,45 @@
     }
   });
 
+  function openPassword(userId, row) {
+    passwordUserId = userId;
+    elements.passwordTarget.textContent = row.querySelector(".admin-name")?.textContent ?? "";
+    elements.passwordValue.value = "";
+    elements.passwordConfirm.value = "";
+    elements.passwordError.hidden = true;
+    elements.passwordDialog.showModal();
+    elements.passwordValue.focus();
+  }
+  elements.passwordCancel.addEventListener("click", () => elements.passwordDialog.close());
+  elements.passwordDialog.addEventListener("close", () => {
+    elements.passwordValue.value = "";
+    elements.passwordConfirm.value = "";
+    passwordUserId = null;
+  });
+  elements.passwordForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!passwordUserId) return;
+    const password = elements.passwordValue.value;
+    elements.passwordError.hidden = true;
+    if (password !== elements.passwordConfirm.value) {
+      elements.passwordError.textContent = "两次输入的密码不一致";
+      elements.passwordError.hidden = false;
+      return;
+    }
+    try {
+      const result = await adminApi(`/api/admin/users/${passwordUserId}/password`, {
+        method: "POST",
+        body: JSON.stringify({ password }),
+      });
+      elements.passwordDialog.close();
+      toast(`已更新 ${result.name} 的密码`);
+      await Promise.all([loadUsers(usersCurrentPage), loadAudit(1)]);
+    } catch (error) {
+      elements.passwordError.textContent = error.message;
+      elements.passwordError.hidden = false;
+    }
+  });
+
   async function toggleBan(userId, row, button) {
     const banned = button.textContent.trim() === "封禁";
     if (banned && !window.confirm("确认封禁该用户？\n将立即踢出所有牌桌、退回桌上筹码并断开连接。")) return;
@@ -392,7 +447,7 @@
   }
 
   // ---------- 审计日志 ----------
-  const ACTION_NAMES = { ADJUST_BALANCE: "调资金", BROADCAST_GRANT: "全服发放", BAN: "封禁", UNBAN: "解封" };
+  const ACTION_NAMES = { ADJUST_BALANCE: "调资金", BROADCAST_GRANT: "全服发放", BAN: "封禁", UNBAN: "解封", RESET_PASSWORD: "重置密码" };
   function auditText(entry) {
     const detail = entry.detail || {};
     if (entry.action === "ADJUST_BALANCE") {
@@ -400,6 +455,9 @@
     }
     if (entry.action === "BROADCAST_GRANT") {
       return `每人 +${fmtMoney(detail.amount)} · ${fmtMoney(detail.recipientCount)} 人 · 合计 +${fmtMoney(detail.totalAmount)} · ${esc(detail.reason || "—")}`;
+    }
+    if (entry.action === "RESET_PASSWORD") {
+      return `旧登录态已注销 ${fmtMoney(detail.revokedSessions || 0)} 个`;
     }
     return esc(detail.reason || (detail.banned ? "封禁" : "解封"));
   }

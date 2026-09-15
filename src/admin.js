@@ -1,6 +1,7 @@
 import { GameError, requireThat } from './errors.js';
 import { credit, balanceOf } from './wallet.js';
 import { hasMahjongTable, tableAssets } from './stats.js';
+import { resetPassword as resetAccountPassword } from './account.js';
 
 export const ADMIN_PAGE_SIZE = 20;
 const AUDIT_ADMIN = 'token';
@@ -9,8 +10,12 @@ export const BROADCAST_MAX_AMOUNT = 1_000_000;
 // ---------- 用户列表（含战绩统计） ----------
 
 // tableStack 从内存房间实时合计；总资产 = 钱包余额 + 桌上筹码（与 overview 同口径）。
-export function usersPage(db, rooms, { q = '', page = 1 } = {}) {
+const USER_SORTS = new Set(['createdAt', 'name', 'balance', 'tableStack', 'totalAssets', 'handsPlayed', 'slotSpins', 'netProfit']);
+
+export function usersPage(db, rooms, { q = '', page = 1, sort = 'createdAt', order = 'desc' } = {}) {
   const current = Number.isSafeInteger(page) && page >= 1 ? page : 1;
+  const sortBy = USER_SORTS.has(sort) ? sort : 'createdAt';
+  const direction = order === 'asc' ? 'asc' : 'desc';
   const keyword = typeof q === 'string' ? q.trim() : '';
   const clause = keyword ? "WHERE a.name LIKE ? ESCAPE '\\'" : '';
   const args = keyword ? [`%${keyword.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`] : [];
@@ -37,9 +42,8 @@ export function usersPage(db, rooms, { q = '', page = 1 } = {}) {
           + (SELECT COALESCE(SUM(s.net), 0) FROM spins s WHERE s.account_id = a.id)
           + ${mahjongNetSql} + ${zjhNetSql} AS netProfit
       FROM accounts a JOIN wallets w ON w.account_id = a.id
-      ${clause}
-      ORDER BY a.created_at DESC, a.id DESC LIMIT ? OFFSET ?`)
-    .all(...args, ADMIN_PAGE_SIZE, (current - 1) * ADMIN_PAGE_SIZE);
+      ${clause}`)
+    .all(...args);
   const stacks = tableAssets(db, rooms);
   const users = rows.map((row) => {
     const tableStack = stacks.get(row.id) ?? 0;
@@ -63,7 +67,26 @@ export function usersPage(db, rooms, { q = '', page = 1 } = {}) {
       createdAt: row.createdAt,
     };
   });
-  return { page: current, pageSize: ADMIN_PAGE_SIZE, total, users };
+  users.sort((left, right) => {
+    const a = left[sortBy];
+    const b = right[sortBy];
+    const compared = sortBy === 'name'
+      ? String(a).localeCompare(String(b), 'zh-CN')
+      : Number(a ?? 0) - Number(b ?? 0);
+    if (compared !== 0) return direction === 'asc' ? compared : -compared;
+    return right.id.localeCompare(left.id);
+  });
+  const pageCount = Math.max(1, Math.ceil(total / ADMIN_PAGE_SIZE));
+  const resolvedPage = Math.min(current, pageCount);
+  const offset = (resolvedPage - 1) * ADMIN_PAGE_SIZE;
+  return {
+    page: resolvedPage,
+    pageSize: ADMIN_PAGE_SIZE,
+    total,
+    sort: sortBy,
+    order: direction,
+    users: users.slice(offset, offset + ADMIN_PAGE_SIZE),
+  };
 }
 
 // ---------- 资金调整 ----------
@@ -150,6 +173,17 @@ export function setBanned(db, accountId, banned) {
 
 export function isBanned(db, accountId) {
   return Boolean(db.prepare('SELECT is_banned FROM accounts WHERE id = ?').get(accountId)?.is_banned);
+}
+
+export function resetPassword(db, accountId, password) {
+  return db.transaction(() => {
+    const result = resetAccountPassword(db, accountId, password);
+    const auditId = writeAudit(db, 'RESET_PASSWORD', accountId, {
+      changedAt: result.changedAt,
+      revokedSessions: result.revokedSessions,
+    });
+    return { ...result, auditId };
+  })();
 }
 
 // ---------- 审计日志 ----------

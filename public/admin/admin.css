@@ -58,10 +58,12 @@
 .admin-toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 14px;
   margin-bottom: 14px;
 }
-.admin-toolbar input {
+.admin-toolbar input,
+.admin-toolbar select {
   width: 260px;
   max-width: 100%;
   height: 38px;
@@ -71,6 +73,8 @@
   border-radius: 6px;
   color: var(--text);
 }
+.admin-toolbar select { width: auto; min-width: 118px; }
+.admin-sort-label { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; }
 .admin-count { font-size: 12px; color: var(--muted); }
 
 .admin-table-wrap {
@@ -214,6 +218,8 @@
   color: var(--text);
 }
 .admin-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+.admin-dialog-actions .button { min-height: 44px; }
+.admin-dialog-note { margin: -7px 0 17px; color: var(--muted); font-size: 12px; line-height: 1.65; }
 
 @media (max-width: 680px) {
   .admin-shell { padding: 18px 14px 46px; }
@@ -222,6 +228,10 @@
   .admin-broadcast-head { flex-direction: column; gap: 7px; }
   .admin-broadcast-form { align-items: stretch; }
   .admin-broadcast-form label, .admin-broadcast-form input, .admin-broadcast-form label:nth-child(2) input { width: 100%; }
+  .admin-toolbar { align-items: stretch; }
+  .admin-toolbar > input { width: 100%; }
+  .admin-sort-label { flex: 1; flex-direction: column; align-items: stretch; gap: 5px; }
+  .admin-toolbar select { width: 100%; }
 }
 
 .admin-npc { margin-bottom: 26px; }

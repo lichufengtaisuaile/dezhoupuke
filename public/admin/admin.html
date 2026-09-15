@@ -98,6 +98,24 @@
 
         <div class="admin-toolbar">
           <input id="searchInput" type="search" placeholder="按昵称搜索…" aria-label="按昵称搜索" />
+          <label class="admin-sort-label" for="sortSelect">排序
+            <select id="sortSelect">
+              <option value="createdAt">注册时间</option>
+              <option value="totalAssets">总资产</option>
+              <option value="balance">可用余额</option>
+              <option value="tableStack">桌上筹码</option>
+              <option value="netProfit">净盈亏</option>
+              <option value="handsPlayed">德州手数</option>
+              <option value="slotSpins">老虎机次数</option>
+              <option value="name">昵称</option>
+            </select>
+          </label>
+          <label class="admin-sort-label" for="orderSelect">顺序
+            <select id="orderSelect">
+              <option value="desc">从高到低</option>
+              <option value="asc">从低到高</option>
+            </select>
+          </label>
           <span class="admin-count" id="usersCount"></span>
         </div>
 
@@ -151,6 +169,26 @@
         <div class="admin-dialog-actions">
           <button type="button" class="button secondary" id="adjustCancel">取消</button>
           <button type="submit" class="button primary">确认调整</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="admin-dialog" id="passwordDialog">
+      <form method="dialog" class="admin-dialog-form" id="passwordForm">
+        <h2>设置密码 · <span id="passwordTarget"></span></h2>
+        <p class="admin-dialog-note">保存后旧密码立即失效，该账号需要使用新密码重新登录。</p>
+        <label>
+          新密码（6–64 个字符）
+          <input id="passwordValue" type="password" minlength="6" maxlength="64" autocomplete="new-password" required />
+        </label>
+        <label>
+          再次输入新密码
+          <input id="passwordConfirm" type="password" minlength="6" maxlength="64" autocomplete="new-password" required />
+        </label>
+        <p class="admin-gate-error" id="passwordError" role="alert" hidden></p>
+        <div class="admin-dialog-actions">
+          <button type="button" class="button secondary" id="passwordCancel">取消</button>
+          <button type="submit" class="button primary">保存新密码</button>
         </div>
       </form>
     </dialog>

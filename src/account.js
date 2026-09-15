@@ -80,3 +80,13 @@ export function updateAvatar(db, accountId, avatar) {
   requireThat(result.changes === 1, '账号不存在');
   return avatar;
 }
+
+export function resetPassword(db, accountId, password) {
+  const secret = validPassword(password);
+  const changedAt = Date.now();
+  const account = db.prepare('SELECT id, name FROM accounts WHERE id = ?').get(accountId);
+  requireThat(account, '没有找到这个用户');
+  db.prepare('UPDATE accounts SET password_hash = ? WHERE id = ?').run(hashPassword(secret), accountId);
+  const revokedSessions = db.prepare('DELETE FROM sessions WHERE account_id = ?').run(accountId).changes;
+  return { accountId, name: account.name, changedAt, revokedSessions };
+}

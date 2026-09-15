@@ -80,6 +80,7 @@ test('admin api without adminToken returns 503, wrong token returns 401', async 
     ['GET', '/api/admin/broadcast-reward/recipients', undefined],
     ['POST', '/api/admin/broadcast-reward', { amount: 1, reason: 'x', requestId: 'missing-admin-0001' }],
     ['POST', '/api/admin/users/x/adjust', { amount: 1, reason: 'x' }],
+    ['POST', '/api/admin/users/x/password', { password: 'new-secret' }],
     ['POST', '/api/admin/users/x/ban', { banned: true }],
   ]) {
     const missing = await api(server.port, method, url, { body });
@@ -142,7 +143,7 @@ test('admin broadcast: grants normal players atomically, excludes NPC/banned acc
   assert.equal(server.db.prepare('SELECT COUNT(*) AS count FROM admin_broadcasts').get().count, 1);
 });
 
-test('admin users list carries stats and supports name search', async (t) => {
+test('admin users list carries stats, supports name search and sorts total assets across the full result', async (t) => {
   const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:', adminToken: ADMIN_TOKEN, npcTables: 0 });
   t.after(async () => { await server.close(); });
 
@@ -175,6 +176,39 @@ test('admin users list carries stats and supports name search', async (t) => {
   const none = (await admin(server.port, 'GET', '/api/admin/users?q=不存在&page=1')).json;
   assert.equal(none.total, 0);
   assert.equal(none.users.length, 0);
+
+  wallet.credit(server.db, alice.accountId, 'ADMIN_ADJUST', 3000, 'test', 'sort-assets');
+  const sorted = (await admin(server.port, 'GET', '/api/admin/users?sort=totalAssets&order=desc')).json;
+  assert.equal(sorted.sort, 'totalAssets');
+  assert.equal(sorted.order, 'desc');
+  assert.equal(sorted.users[0].name, 'alice');
+  const ascending = (await admin(server.port, 'GET', '/api/admin/users?sort=name&order=asc')).json;
+  assert.deepEqual(ascending.users.map((user) => user.name), ['alice', 'bob']);
+});
+
+test('admin resets a password, revokes old sessions and records an audit without storing plaintext', async (t) => {
+  const server = await createPokerServer({ port: 0, host: '127.0.0.1', dbPath: ':memory:', adminToken: ADMIN_TOKEN, npcTables: 0 });
+  t.after(async () => { await server.close(); });
+  const registered = (await api(server.port, 'POST', '/api/register', { body: { name: 'pwd-user', password: 'secret123' } })).json;
+
+  const reset = await admin(server.port, 'POST', `/api/admin/users/${registered.accountId}/password`, {
+    body: { password: 'new-secret-456' },
+  });
+  assert.equal(reset.status, 200);
+  assert.equal(reset.json.name, 'pwd-user');
+  assert.ok(reset.json.revokedSessions >= 1);
+  assert.equal((await api(server.port, 'GET', '/api/me/overview', { token: registered.token })).status, 401);
+  assert.equal((await api(server.port, 'POST', '/api/login', { body: { name: 'pwd-user', password: 'secret123' } })).status, 400);
+  assert.equal((await api(server.port, 'POST', '/api/login', { body: { name: 'pwd-user', password: 'new-secret-456' } })).status, 200);
+  const stored = server.db.prepare('SELECT password_hash FROM accounts WHERE id = ?').get(registered.accountId);
+  assert.equal(stored.password_hash.includes('new-secret-456'), false);
+  const audit = (await admin(server.port, 'GET', '/api/admin/audit')).json.entries[0];
+  assert.equal(audit.action, 'RESET_PASSWORD');
+  assert.equal(JSON.stringify(audit.detail).includes('new-secret-456'), false);
+  const tooShort = await admin(server.port, 'POST', `/api/admin/users/${registered.accountId}/password`, {
+    body: { password: '123' },
+  });
+  assert.equal(tooShort.status, 400);
 });
 
 test('admin adjust: positive/negative balance, ADMIN_ADJUST ledger, audit trail, validation', async (t) => {

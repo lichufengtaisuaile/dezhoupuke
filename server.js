@@ -17,6 +17,7 @@ import * as adminOps from './src/admin.js';
 import { decideBotAction, normalizeDifficulty } from './src/bot.js';
 import * as npc from './src/npc.js';
 import { createMahjongService } from './src/mahjong-service.js';
+import { createZjhService } from './src/zjh-service.js';
 import './public/social-catalog.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -68,7 +69,7 @@ export function networkUrls(port) {
     .map(entry => `http://${entry.address}:${port}`);
 }
 
-export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTimeoutMs = 30000, botDelayMs = 1100, disconnectGraceMs = 90000, nextHandDelayMs = 5000, dbPath = path.join(ROOT, 'data', 'dezhou.db'), requireAuth = true, adminToken = process.env.DEZHOU_ADMIN_TOKEN ?? '', npcTables = Number(process.env.NPC_TABLES ?? 2), npcHealIntervalMs = 30000, npcBaseDelayMs = 800, npcJitterMs = 1800, mahjongTurnTimeoutMs = 20000, mahjongBotDelayMs = 750 } = {}) {
+export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTimeoutMs = 30000, botDelayMs = 1100, disconnectGraceMs = 90000, nextHandDelayMs = 5000, dbPath = path.join(ROOT, 'data', 'dezhou.db'), requireAuth = true, adminToken = process.env.DEZHOU_ADMIN_TOKEN ?? '', npcTables = Number(process.env.NPC_TABLES ?? 2), npcHealIntervalMs = 30000, npcBaseDelayMs = 800, npcJitterMs = 1800, mahjongTurnTimeoutMs = 20000, mahjongBotDelayMs = 750, zjhTurnTimeoutMs = 30000, zjhTrusteeDelayMs = 900, zjhNextRoundDelayMs = 4500 } = {}) {
   const npcTableCount = Number.isSafeInteger(npcTables) ? Math.min(Math.max(npcTables, 0), 8) : 2;
   const app = express();
   const httpServer = createServer(app);
@@ -77,6 +78,7 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
   const accountAvatar = db.prepare('SELECT avatar FROM accounts WHERE id = ?');
   const rooms = new Map();
   let mahjong;
+  let zjh;
   let actualPort = port;
   let closing = false;
   let closed = false;
@@ -157,6 +159,7 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
         if (room.players.some(player => player.accountId === account.id)) broadcast(room);
       }
       mahjong.updateAccountAvatar(account.id, avatar);
+      zjh.updateAccountAvatar(account.id, avatar);
       res.json({ ok: true, avatar });
     } catch (error) { apiError(res, error); }
   });
@@ -180,7 +183,7 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
   app.get('/api/me/tables', (req, res) => {
     const account = bearerAccount(req, res);
     if (!account) return;
-    try { res.json({ ok: true, tables: [...myTables(account.id), ...mahjong.myTables(account.id)] }); }
+    try { res.json({ ok: true, tables: [...myTables(account.id), ...mahjong.myTables(account.id), ...zjh.myTables(account.id)] }); }
     catch (error) { apiError(res, error); }
   });
   // 老虎机开奖：Bearer token，body { bet, spinId }。服务端 crypto 随机开奖，
@@ -237,7 +240,7 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
     if (!bearerAdmin(req, res)) return;
     try {
       const result = adminOps.setBanned(db, req.params.id, req.body?.banned);
-      if (result.banned) { kickAccount(result.accountId); mahjong.kickAccount(result.accountId); }
+      if (result.banned) { kickAccount(result.accountId); mahjong.kickAccount(result.accountId); zjh.kickAccount(result.accountId); }
       res.json({ ok: true, ...result });
     } catch (error) { apiError(res, error); }
   });
@@ -318,6 +321,14 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
     try { res.json({ ok: true, ...mahjong.store.historyPage(account.id, req.query.page) }); }
     catch (error) { apiError(res, error); }
   });
+  app.get('/api/zjh/rooms', (_req, res) => res.json({ ok: true, rooms: zjh.lobbyRooms() }));
+  app.get('/api/zjh/rules', (_req, res) => res.json({ ok: true, rules: zjh.rules }));
+  app.get('/api/me/zjh', (req, res) => {
+    const account = bearerAccount(req, res);
+    if (!account) return;
+    try { res.json({ ok: true, ...zjh.store.historyPage(account.id, req.query.page) }); }
+    catch (error) { apiError(res, error); }
+  });
   app.post('/api/me/subsidy', (req, res) => {
     const account = bearerAccount(req, res);
     if (!account) return;
@@ -328,6 +339,7 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
     } catch (error) { apiError(res, error); }
   });
   app.get(['/mahjong', '/mahjong/'], (_req, res) => res.sendFile(path.join(ROOT, 'public', 'mahjong', 'index.html')));
+  app.get(['/zjh', '/zjh/'], (_req, res) => res.sendFile(path.join(ROOT, 'public', 'zjh', 'index.html')));
   // 老虎机独立游戏页：/slot/ 与 /slot 都落到 slot.html（静态目录的默认索引是 index.html）。
   app.get(['/slot', '/slot/'], (_req, res) => res.sendFile(path.join(ROOT, 'public', 'slot', 'slot.html')));
   // 管理员后台页（不进门户游戏卡片）。
@@ -1075,7 +1087,7 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       const allowSpectators = custom ? input.allowSpectators !== false : false;
       const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
       let code;
-      do { code = Array.from({ length: 6 }, () => alphabet[randomInt(alphabet.length)]).join(''); } while (rooms.has(code) || mahjong.hasCode(code));
+      do { code = Array.from({ length: 6 }, () => alphabet[randomInt(alphabet.length)]).join(''); } while (rooms.has(code) || mahjong.hasCode(code) || zjh.hasCode(code));
       const room = {
         code, smallBlind, bigBlind, buyIn, maxBuyIn, unlimitedBuyIn, mode, custom, passwordHash, allowSpectators,
         tournamentLevel: 0, spectators: new Set(), phase: 'lobby', players: [], hostId: null,
@@ -1213,7 +1225,7 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       const room = membership ? rooms.get(membership.code) : null;
       const player = room?.players.find(p => p.accountId === account.id && !p.departing) ?? null;
       requireThat(!room?.practice, '练习桌使用免费练习筹码，无需补助');
-      let tableStack = mahjong.store.activeAssets().get(account.id) ?? 0;
+      let tableStack = (mahjong.store.activeAssets().get(account.id) ?? 0) + (zjh.store.activeAssets().get(account.id) ?? 0);
       for (const other of rooms.values()) {
         if (other.practice) continue;
         for (const seated of other.players) if (seated.accountId === account.id) tableStack += seated.stack;
@@ -1332,15 +1344,24 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
   actualPort = httpServer.address().port;
   // Only the successfully bound server may recover Mahjong escrow and run its timers.
   mahjong = createMahjongService({ io, db, pokerRooms: rooms, turnTimeoutMs: mahjongTurnTimeoutMs, botDelayMs: mahjongBotDelayMs });
+  zjh = createZjhService({
+    io,
+    db,
+    codeTaken: code => rooms.has(code) || mahjong.hasCode(code),
+    turnTimeoutMs: zjhTurnTimeoutMs,
+    trusteeDelayMs: zjhTrusteeDelayMs,
+    nextRoundDelayMs: zjhNextRoundDelayMs,
+  });
   restoreRooms();
   healNpcTables();
   return {
-    app, httpServer, io, rooms, mahjong, db, port: actualPort,
+    app, httpServer, io, rooms, mahjong, zjh, db, port: actualPort,
     async close() {
       if (closed) return;
       closed = true;
       closing = true;
       mahjong.close();
+      zjh.close();
       clearInterval(npcHealTimer);
       for (const room of rooms.values()) {
         clearTurn(room);

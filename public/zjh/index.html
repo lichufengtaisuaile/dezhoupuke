@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#171b1a" />
+  <meta name="description" content="同桌炸金花，2–8 人经典对局，看牌、跟注、加注与比牌。" />
+  <title>炸金花 · 同桌</title>
+  <link rel="icon" type="image/png" href="/brand/tongzhuo-cat-favicon.png" />
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/lobby.css" />
+  <link rel="stylesheet" href="/account.css" />
+  <link rel="stylesheet" href="/zjh/style.css" />
+</head>
+<body class="zjh-page">
+  <header class="zjh-header">
+    <a class="zjh-brand" href="/#/" aria-label="返回同桌游戏大厅">
+      <img src="/brand/tongzhuo-cat-favicon.png" alt="" />
+      <span><strong>同桌</strong><small>炸金花</small></span>
+    </a>
+    <div class="zjh-header-actions">
+      <div class="topbar-identity" id="zjh-identity"></div>
+      <button class="icon-button bordered" type="button" data-open-rules aria-label="玩法规则" title="玩法规则"><i data-lucide="book-open"></i></button>
+    </div>
+  </header>
+
+  <main class="zjh-lobby" id="zjh-lobby">
+    <section class="zjh-hero">
+      <div>
+        <h1>三张牌，见真章</h1>
+        <p>暗注试探，看牌加倍。叫上朋友，在同一张桌上把胆量和判断押到最后。</p>
+        <div class="zjh-hero-actions">
+          <button class="button primary" id="zjh-create-open" type="button"><i data-lucide="plus"></i>创建房间</button>
+          <button class="button secondary" id="zjh-join-open" type="button"><i data-lucide="hash"></i>房号加入</button>
+        </div>
+        <div class="zjh-rule-strip"><span>2–8 人</span><span>经典模式</span><span>全额带入</span><span>235 默认吃豹子</span></div>
+      </div>
+      <div class="zjh-hero-cards" aria-hidden="true">
+        <span class="zjh-show-card red"><b>A</b><i>♥</i></span>
+        <span class="zjh-show-card"><b>A</b><i>♠</i></span>
+        <span class="zjh-show-card red"><b>A</b><i>♦</i></span>
+      </div>
+    </section>
+    <section class="zjh-resume" id="zjh-resume" hidden>
+      <div><strong>你有一桌正在进行</strong><span id="zjh-resume-code"></span></div>
+      <button class="button primary" id="zjh-resume-button" type="button">返回牌桌</button>
+    </section>
+    <section class="zjh-rooms" aria-labelledby="zjh-rooms-title">
+      <div class="zjh-section-heading">
+        <div><h2 id="zjh-rooms-title">找一桌，坐下来</h2><p>进入房间会自动带入钱包中的全部可用筹码。</p></div>
+        <button class="icon-button bordered" id="zjh-refresh" type="button" aria-label="刷新房间"><i data-lucide="refresh-cw"></i></button>
+      </div>
+      <div class="zjh-room-list" id="zjh-room-list" aria-live="polite"><p class="zjh-empty">正在寻找牌桌…</p></div>
+    </section>
+    <a class="zjh-back" href="/#/"><i data-lucide="arrow-left"></i>返回游戏大厅</a>
+  </main>
+
+  <main class="zjh-game" id="zjh-game" hidden>
+    <div class="zjh-game-bar">
+      <div><strong id="zjh-room-code"></strong><span id="zjh-room-rule"></span></div>
+      <div class="zjh-game-tools">
+        <button type="button" id="zjh-invite"><i data-lucide="link"></i><span>邀请</span></button>
+        <button type="button" data-open-rules><i data-lucide="book-open"></i><span>规则</span></button>
+        <button type="button" id="zjh-leave-open"><i data-lucide="log-out"></i><span>离桌</span></button>
+      </div>
+    </div>
+    <section class="zjh-table" id="zjh-table" aria-label="炸金花牌桌">
+      <div class="zjh-felt-mark" aria-hidden="true">同桌</div>
+      <div id="zjh-seats"></div>
+      <div class="zjh-center">
+        <span id="zjh-round-label">等待开局</span>
+        <strong id="zjh-pot">底池 0</strong>
+        <span id="zjh-current-bet">最小下注</span>
+      </div>
+      <div class="zjh-result" id="zjh-result" hidden></div>
+      <div class="zjh-waiting" id="zjh-waiting">
+        <p id="zjh-waiting-text">邀请朋友加入，两人准备后开局</p>
+        <button class="button primary" id="zjh-ready" type="button">准备</button>
+      </div>
+    </section>
+    <section class="zjh-controls" aria-label="我的手牌与操作">
+      <div class="zjh-self-line">
+        <div id="zjh-self-summary"></div>
+        <div><span id="zjh-turn-text"></span><strong id="zjh-countdown"></strong></div>
+      </div>
+      <div class="zjh-own-cards" id="zjh-own-cards"></div>
+      <div class="zjh-action-panel" id="zjh-action-panel" hidden></div>
+      <div class="zjh-actions" id="zjh-actions"></div>
+      <p class="zjh-help" id="zjh-help">暗牌下注按当前注额计算，看牌后所有支付翻倍。</p>
+    </section>
+  </main>
+
+  <dialog class="home-dialog zjh-dialog" id="zjh-create-dialog" aria-labelledby="zjh-create-title">
+    <div class="home-dialog-heading"><h2 id="zjh-create-title">创建炸金花房间</h2><button class="icon-button" type="button" data-close aria-label="关闭"><i data-lucide="x"></i></button></div>
+    <form class="home-dialog-form" id="zjh-create-form">
+      <label for="zjh-min-bet">最小下注</label>
+      <input id="zjh-min-bet" name="minBet" type="number" min="1" max="1000000" step="1" value="10" inputmode="numeric" required />
+      <label class="zjh-checkbox"><input id="zjh-rule-235" type="checkbox" checked />开启“235 吃豹子”</label>
+      <p class="zjh-dialog-note">创建后自动把钱包里的全部可用筹码带入牌桌。离桌时退回剩余筹码。</p>
+      <p class="home-dialog-error" data-form-error role="alert" hidden></p>
+      <button class="button primary full" type="submit">创建并入座</button>
+    </form>
+  </dialog>
+
+  <dialog class="home-dialog zjh-dialog" id="zjh-join-dialog" aria-labelledby="zjh-join-title">
+    <div class="home-dialog-heading"><h2 id="zjh-join-title">房号加入</h2><button class="icon-button" type="button" data-close aria-label="关闭"><i data-lucide="x"></i></button></div>
+    <form class="home-dialog-form" id="zjh-join-form">
+      <label for="zjh-join-code">房间号</label>
+      <input id="zjh-join-code" name="code" maxlength="12" autocomplete="off" autocapitalize="characters" placeholder="输入朋友的房间号" required />
+      <p class="zjh-dialog-note" id="zjh-join-preview">确认后将带入钱包中的全部可用筹码。</p>
+      <p class="home-dialog-error" data-form-error role="alert" hidden></p>
+      <button class="button primary full" type="submit">确认加入</button>
+    </form>
+  </dialog>
+
+  <dialog class="home-dialog zjh-dialog zjh-rules-dialog" id="zjh-rules-dialog" aria-labelledby="zjh-rules-title">
+    <div class="home-dialog-heading"><h2 id="zjh-rules-title">经典炸金花规则</h2><button class="icon-button" type="button" data-close aria-label="关闭"><i data-lucide="x"></i></button></div>
+    <div class="zjh-rules">
+      <dl>
+        <dt>牌型大小</dt><dd>豹子 ＞ 同花顺 ＞ 金花 ＞ 顺子 ＞ 对子 ＞ 单张。A23 是最小顺子。</dd>
+        <dt>235 吃豹子</dt><dd>默认开启。杂色 2、3、5 可以击败豹子，但遇到其他牌型仍按普通单张比较。</dd>
+        <dt>下注</dt><dd>暗牌按当前注额支付；看牌后跟注、加注和发起比牌均支付两倍。加注以本桌最小下注为步长。</dd>
+        <dt>比牌</dt><dd>发起者支付当前费用并选择一位仍在局中的玩家。同牌时发起者判负。</dd>
+        <dt>轮数保护</dt><dd>最多进行 20 轮自由下注，之后只可弃牌或比牌，避免牌局无限拖延。</dd>
+        <dt>筹码与离桌</dt><dd>入桌默认带入全部可用筹码。对局中离桌会进入托管，本局结束后自动退回剩余筹码。</dd>
+      </dl>
+    </div>
+  </dialog>
+
+  <dialog class="home-dialog zjh-dialog" id="zjh-leave-dialog" aria-labelledby="zjh-leave-title">
+    <div class="home-dialog-heading"><h2 id="zjh-leave-title">离开牌桌</h2><button class="icon-button" type="button" data-close aria-label="关闭"><i data-lucide="x"></i></button></div>
+    <p class="zjh-dialog-note" id="zjh-leave-note"></p>
+    <div class="zjh-dialog-actions"><button class="button secondary" type="button" data-close>继续玩</button><button class="button primary" id="zjh-leave-confirm" type="button">确认离桌</button></div>
+  </dialog>
+
+  <div class="zjh-toast" id="zjh-toast" role="status" hidden></div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/vendor/lucide.js"></script>
+  <script src="/avatar-catalog.js"></script>
+  <script src="/avatars.js"></script>
+  <script src="/account.js"></script>
+  <script src="/zjh/app.js"></script>
+</body>
+</html>

@@ -19,6 +19,10 @@ export function usersPage(db, rooms, { q = '', page = 1 } = {}) {
   const mahjongRoundsSql = hasMahjong ? '(SELECT COUNT(*) FROM mahjong_round_players mp WHERE mp.account_id = a.id)' : '0';
   const mahjongNetSql = hasMahjong ? '(SELECT COALESCE(SUM(mp.net), 0) FROM mahjong_round_players mp WHERE mp.account_id = a.id)' : '0';
   const mahjongWinsSql = hasMahjong ? '(SELECT COALESCE(SUM(mp.wins), 0) FROM mahjong_round_players mp WHERE mp.account_id = a.id)' : '0';
+  const hasZjh = hasMahjongTable(db, 'zjh_round_players');
+  const zjhRoundsSql = hasZjh ? '(SELECT COUNT(*) FROM zjh_round_players zp WHERE zp.account_id = a.id)' : '0';
+  const zjhNetSql = hasZjh ? '(SELECT COALESCE(SUM(zp.net), 0) FROM zjh_round_players zp WHERE zp.account_id = a.id)' : '0';
+  const zjhWinsSql = hasZjh ? '(SELECT COALESCE(SUM(zp.is_winner), 0) FROM zjh_round_players zp WHERE zp.account_id = a.id)' : '0';
   const rows = db.prepare(`
       SELECT a.id, a.name, a.is_banned AS isBanned, a.npc, a.created_at AS createdAt, w.balance,
         (SELECT COUNT(*) FROM hand_players hp WHERE hp.account_id = a.id) AS handsPlayed,
@@ -26,9 +30,12 @@ export function usersPage(db, rooms, { q = '', page = 1 } = {}) {
         ${mahjongRoundsSql} AS mahjongRounds,
         ${mahjongNetSql} AS mahjongNet,
         ${mahjongWinsSql} AS mahjongHuCount,
+        ${zjhRoundsSql} AS zjhRounds,
+        ${zjhNetSql} AS zjhNet,
+        ${zjhWinsSql} AS zjhWins,
         (SELECT COALESCE(SUM(hp.net), 0) FROM hand_players hp WHERE hp.account_id = a.id)
           + (SELECT COALESCE(SUM(s.net), 0) FROM spins s WHERE s.account_id = a.id)
-          + ${mahjongNetSql} AS netProfit
+          + ${mahjongNetSql} + ${zjhNetSql} AS netProfit
       FROM accounts a JOIN wallets w ON w.account_id = a.id
       ${clause}
       ORDER BY a.created_at DESC, a.id DESC LIMIT ? OFFSET ?`)
@@ -49,6 +56,9 @@ export function usersPage(db, rooms, { q = '', page = 1 } = {}) {
       mahjongRounds: row.mahjongRounds,
       mahjongNet: row.mahjongNet,
       mahjongHuCount: row.mahjongHuCount,
+      zjhRounds: row.zjhRounds,
+      zjhNet: row.zjhNet,
+      zjhWins: row.zjhWins,
       netProfit: row.netProfit,
       createdAt: row.createdAt,
     };

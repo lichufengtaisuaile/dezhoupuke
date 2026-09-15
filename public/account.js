@@ -14,6 +14,7 @@
     SLOT_BET: "老虎机下注",
     SLOT_WIN: "老虎机派奖",
     MAHJONG_SETTLE: "麻将桌内输赢",
+    ZJH_SETTLE: "炸金花桌内输赢",
     ADMIN_ADJUST: "管理员调整",
   };
   const TRANSFER_TYPES = new Set(["BRING_IN", "CASH_OUT"]);
@@ -122,6 +123,9 @@
       mahjongRounds: data.mahjongRounds ?? 0,
       mahjongNet: data.mahjongNet ?? 0,
       mahjongHuCount: data.mahjongHuCount ?? 0,
+      zjhRounds: data.zjhRounds ?? 0,
+      zjhNet: data.zjhNet ?? 0,
+      zjhWins: data.zjhWins ?? 0,
     };
   }
 
@@ -515,6 +519,8 @@
         <div><span>老虎机净盈亏</span><strong class="${Number(data.slotNet || 0) > 0 ? "pos" : Number(data.slotNet || 0) < 0 ? "neg" : ""}">${Number(data.slotNet || 0) === 0 ? "0" : signedMoney(Number(data.slotNet || 0))}</strong></div>
         <div><span>麻将局数 / 胡牌次数</span><strong>${money(data.mahjongRounds)} / ${money(data.mahjongHuCount)}</strong></div>
         <div><span>麻将净盈亏</span><strong class="${Number(data.mahjongNet || 0) > 0 ? "pos" : Number(data.mahjongNet || 0) < 0 ? "neg" : ""}">${Number(data.mahjongNet || 0) === 0 ? "0" : signedMoney(data.mahjongNet)}</strong></div>
+        <div><span>炸金花局数 / 获胜次数</span><strong>${money(data.zjhRounds)} / ${money(data.zjhWins)}</strong></div>
+        <div><span>炸金花净盈亏</span><strong class="${Number(data.zjhNet || 0) > 0 ? "pos" : Number(data.zjhNet || 0) < 0 ? "neg" : ""}">${Number(data.zjhNet || 0) === 0 ? "0" : signedMoney(data.zjhNet)}</strong></div>
       </div>
       ${Number(data.totalAssets) < SUBSIDY_THRESHOLD
         ? `<button type="button" class="button secondary full profile-subsidy" data-profile-subsidy><i data-lucide="gift"></i>领取每日补助 2,000 筹码</button>`
@@ -749,7 +755,7 @@
       <ul class="profile-list">${items.map((entry) => {
         const amount = Number(entry.amount || 0);
         const transfer = TRANSFER_TYPES.has(entry.type);
-        const tableMemo = entry.type === "MAHJONG_SETTLE" || entry.type === "HAND_WIN";
+        const tableMemo = entry.type === "MAHJONG_SETTLE" || entry.type === "ZJH_SETTLE" || entry.type === "HAND_WIN";
         return `<li class="profile-ledger">
           <div class="profile-ledger-main">
             <span class="profile-ledger-type${transfer ? " is-transfer" : ""}">${esc(entry.type === "ADMIN_ADJUST" && entry.refType === "admin-broadcast" ? "全服发放" : (LEDGER_TYPES[entry.type] || entry.type))}</span>

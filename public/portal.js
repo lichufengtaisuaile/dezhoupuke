@@ -29,7 +29,7 @@
       name: "炸金花",
       icon: "club",
       description: "2–8 人经典对局，默认开启 235 吃豹子",
-      available: false,
+      available: true,
     },
   ];
 
@@ -102,7 +102,7 @@
         <button type="button" class="portal-table" data-table-code="${esc(table.code)}" data-table-game="${esc(table.game || 'holdem')}">
           <span class="portal-table-main">
             <strong>#${esc(table.code)}</strong>
-            <span class="portal-table-meta">${table.game === 'mahjong' ? `血流红中 · 底分 ${number(table.base)}` : `德州 · 盲注 ${number(table.smallBlind)} / ${number(table.bigBlind)}`}${table.practice ? ' · <b class="portal-table-practice">练习桌</b>' : ""}</span>
+            <span class="portal-table-meta">${table.game === 'mahjong' ? `血流红中 · 底分 ${number(table.base)}` : table.game === 'zjh' ? `炸金花 · 最小下注 ${number(table.minBet)}` : `德州 · 盲注 ${number(table.smallBlind)} / ${number(table.bigBlind)}`}${table.practice ? ' · <b class="portal-table-practice">练习桌</b>' : ""}</span>
           </span>
           <span class="portal-table-state${table.playing ? " is-playing" : ""}">${table.playing ? "对局中" : "等待中"}</span>
           <span class="portal-table-stack">${icon("coins")}桌上 ${number(table.myStack)}</span>

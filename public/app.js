@@ -94,12 +94,17 @@
         location.assign("/slot/");
         return;
       }
+      if (id === "zjh") {
+        location.assign("/zjh/");
+        return;
+      }
       if (id !== "holdem") return;
       if (!(await requireAuth())) return;
       location.hash = "#/holdem";
     },
     onReturnToTable: (code, game) => {
       if (game === "mahjong") location.assign(`/mahjong/?room=${encodeURIComponent(code)}`);
+      else if (game === "zjh") location.assign(`/zjh/?room=${encodeURIComponent(code)}`);
       else returnToTable(code);
     },
   });

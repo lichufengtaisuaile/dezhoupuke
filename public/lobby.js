@@ -152,6 +152,13 @@ function compactNumber(value) {
       // 无上限房：起始筹码不再受输入框默认上限 100000 的约束
       if (unlimited) form.elements.buyIn.removeAttribute("max");
       else form.elements.buyIn.max = "100000";
+      // 无上限房：带入金额锁定为起始筹码并跟随其变化，不再单独编辑
+      if (unlimited) {
+        form.elements.bringIn.value = form.elements.buyIn.value;
+        form.elements.bringIn.setAttribute("readonly", "");
+      } else {
+        form.elements.bringIn.removeAttribute("readonly");
+      }
     }
     function syncJoinBringIn() {
       const form = get("join-form");

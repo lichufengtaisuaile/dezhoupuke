@@ -173,14 +173,14 @@ export function resolveDraw(hitRoll, avatarRoll) {
   return prizes[avatarRoll];
 }
 
-export function openBox(db, accountId, openId) {
+export function openBox(db, accountId, openId, { allowNpc = false } = {}) {
   requireThat(typeof openId === 'string' && ID_PATTERN.test(openId), '请求格式不正确');
   return db.transaction(() => {
     const existing = db.prepare('SELECT * FROM treasure_opens WHERE id = ? AND account_id = ?').get(openId, accountId);
     if (existing) return openResult(existing, balanceOf(db, accountId), true);
     const account = db.prepare('SELECT id, npc FROM accounts WHERE id = ?').get(accountId);
     requireThat(account, '账户不存在');
-    requireThat(!account.npc, '系统账号不能开启头像宝箱');
+    requireThat(allowNpc || !account.npc, '系统账号不能开启头像宝箱');
     requireThat(balanceOf(db, accountId) >= BOX_PRICE, '筹码余额不足');
 
     const prizes = globalThis.TONGZHUO_AVATARS.prizeItems;
@@ -268,14 +268,14 @@ export function activeListings(db, { avatarId = '', limit = 100 } = {}) {
   };
 }
 
-export function createListing(db, accountId, itemId, price) {
+export function createListingInternal(db, accountId, itemId, price, { allowNpc = false } = {}) {
   sweepExpiredListings(db);
   requireThat(typeof itemId === 'string' && ID_PATTERN.test(itemId), '请选择要出售的头像');
   requireThat(Number.isSafeInteger(price) && price >= MIN_LISTING_PRICE,
     `售价不能低于 ${MIN_LISTING_PRICE.toLocaleString('zh-CN')}`);
   return db.transaction(() => {
     const account = db.prepare('SELECT avatar, npc FROM accounts WHERE id = ?').get(accountId);
-    requireThat(account && !account.npc, '当前账号不能使用交易行');
+    requireThat(account && (allowNpc || !account.npc), '当前账号不能使用交易行');
     const listingFee = Math.max(1, Math.floor(price * LISTING_FEE_BASIS_POINTS / BASIS_POINTS));
     requireThat(balanceOf(db, accountId) >= listingFee, `筹码余额不足以支付上架费 ${listingFee.toLocaleString('zh-CN')}`);
     const activeCount = db.prepare(`SELECT COUNT(*) AS count FROM avatar_market_listings
@@ -301,6 +301,11 @@ export function createListing(db, accountId, itemId, price) {
   })();
 }
 
+// 玩家上架走这里（拒绝 NPC）；NPC 系统行为用 createListingInternal。
+export function createListing(db, accountId, itemId, price) {
+  return createListingInternal(db, accountId, itemId, price);
+}
+
 export function cancelListing(db, accountId, listingId) {
   requireThat(typeof listingId === 'string' && ID_PATTERN.test(listingId), '订单格式不正确');
   return db.transaction(() => {
@@ -313,7 +318,7 @@ export function cancelListing(db, accountId, listingId) {
   })();
 }
 
-export function buyListing(db, accountId, listingId) {
+export function buyListing(db, accountId, listingId, { allowNpc = false } = {}) {
   requireThat(typeof listingId === 'string' && ID_PATTERN.test(listingId), '订单格式不正确');
   return db.transaction(() => {
     const listing = db.prepare(`${LISTING_SELECT} WHERE l.id = ?`).get(listingId);
@@ -335,7 +340,7 @@ export function buyListing(db, accountId, listingId) {
     requireThat(listing.status === 'ACTIVE', '这件头像已经售出或下架');
     requireThat(listing.seller_account_id !== accountId, '不能购买自己上架的头像');
     const buyer = db.prepare('SELECT id, npc FROM accounts WHERE id = ?').get(accountId);
-    requireThat(buyer && !buyer.npc, '当前账号不能使用交易行');
+    requireThat(buyer && (allowNpc || !buyer.npc), '当前账号不能使用交易行');
     requireThat(balanceOf(db, accountId) >= listing.price, '筹码余额不足');
     const fee = Math.floor(listing.price * MARKET_FEE_BASIS_POINTS / BASIS_POINTS);
     const proceeds = listing.price - fee;

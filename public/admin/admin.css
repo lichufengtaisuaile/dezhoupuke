@@ -257,3 +257,163 @@
 .admin-mini-button { min-height: 28px; padding: 3px 10px; font-size: 11px; border-radius: 8px; border: 1px solid #4d7a5e; background: transparent; color: inherit; cursor: pointer; }
 .admin-mini-button.is-danger { border-color: #6d3a3d; background: #3a2426; color: #efa2a5; }
 .admin-market-actions { white-space: nowrap; }
+
+/* ---------- 左侧导航多页布局 ---------- */
+
+.admin-app {
+  display: flex;
+  min-height: 100vh;
+}
+
+.admin-side {
+  width: 200px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 22px 14px;
+  border-right: 1px solid var(--line);
+  background: #ffffff05;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+.admin-side-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 6px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.admin-side-brand img { width: 34px; height: 34px; border-radius: 8px; }
+.admin-side-brand strong { display: block; font-size: 15px; }
+.admin-side-brand span { display: block; font-size: 11px; color: var(--muted); }
+.admin-side .admin-logout { margin-top: auto; }
+
+.admin-nav { display: flex; flex-direction: column; gap: 4px; }
+.admin-nav-item {
+  text-align: left;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+.admin-nav-item:hover { background: #ffffff0a; color: var(--text); }
+.admin-nav-item.is-active { background: #5ee0a022; color: #5ee0a0; font-weight: 600; }
+
+.admin-main {
+  flex: 1;
+  min-width: 0;
+  padding: 26px 28px 60px;
+}
+.admin-page { display: none; }
+.admin-page.is-active { display: block; }
+.admin-page h2 { margin: 0 0 18px; font-size: 20px; font-weight: 650; }
+.admin-page h3 { font-size: 15px; }
+
+/* 总览统计卡片 */
+.admin-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 22px;
+}
+.admin-stat-card {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #ffffff05;
+}
+.admin-stat-card span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.admin-stat-card strong { font-size: 22px; font-weight: 700; }
+
+/* 图表卡片 */
+.admin-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px;
+}
+.admin-chart-card {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #ffffff05;
+}
+.admin-chart-card h3 { margin: 0 0 12px; }
+.admin-chart { width: 100%; height: 200px; display: block; }
+.admin-chart-empty { font-size: 12px; color: var(--muted); }
+
+/* 交易监管头像 */
+.admin-avatar-cell { display: flex; align-items: center; gap: 10px; }
+.admin-avatar-cell img {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: #101815;
+}
+.admin-avatar-cell strong { display: block; font-size: 13px; }
+.admin-avatar-cell span { display: block; font-size: 11px; color: var(--muted); }
+
+/* 奖池网格 */
+.admin-treasure-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 4px 0 12px;
+}
+.admin-prize-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 10px;
+}
+.admin-prize-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #ffffff05;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.admin-prize-card:hover { border-color: #5ee0a088; }
+.admin-prize-card img {
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  object-fit: cover;
+  background: #101815;
+}
+.admin-prize-card strong { font-size: 13px; }
+.admin-prize-card span { font-size: 11px; color: var(--muted); }
+.admin-prize-card em { font-style: normal; font-size: 11px; color: #5ee0a0; }
+.admin-prize-card.is-disabled { opacity: 0.38; }
+.admin-prize-card.is-disabled em { color: var(--muted); }
+
+@media (max-width: 760px) {
+  .admin-app { flex-direction: column; }
+  .admin-side {
+    width: auto;
+    height: auto;
+    position: static;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+    padding: 12px 14px;
+  }
+  .admin-side-brand { border-bottom: none; padding-bottom: 0; }
+  .admin-nav { flex-direction: row; flex-wrap: wrap; }
+  .admin-nav-item { padding: 8px 10px; font-size: 13px; }
+  .admin-side .admin-logout { margin-top: 0; margin-left: auto; }
+  .admin-main { padding: 18px 14px 50px; }
+}

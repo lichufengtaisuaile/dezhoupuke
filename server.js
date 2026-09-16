@@ -162,7 +162,7 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
     } catch (error) { apiError(res, error); }
   });
   app.get('/api/treasure/config', (_req, res) => {
-    try { res.json({ ok: true, ...treasure.config() }); }
+    try { res.json({ ok: true, ...treasure.config(db) }); }
     catch (error) { apiError(res, error); }
   });
   app.post('/api/treasure/open', (req, res) => {
@@ -360,6 +360,27 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
     if (!bearerAdmin(req, res)) return;
     try { res.json({ ok: true, ...adminOps.revertTrade(db, req.params.id, req.body?.reason) }); }
     catch (error) { apiError(res, error); }
+  });
+  app.get('/api/admin/treasure-config', (req, res) => {
+    if (!bearerAdmin(req, res)) return;
+    try { res.json({ ok: true, ...adminOps.treasureConfigPage(db) }); }
+    catch (error) { apiError(res, error); }
+  });
+  app.post('/api/admin/treasure-config', (req, res) => {
+    if (!bearerAdmin(req, res)) return;
+    try { res.json({ ok: true, ...adminOps.updateTreasureConfig(db, req.body ?? {}) }); }
+    catch (error) { apiError(res, error); }
+  });
+  app.get('/api/admin/dashboard', (req, res) => {
+    if (!bearerAdmin(req, res)) return;
+    try {
+      res.json({
+        ok: true,
+        ...adminOps.dashboard(db, rooms),
+        online: adminOps.onlineSeries(db, 24),
+        registrations: adminOps.registrationSeries(db, 30),
+      });
+    } catch (error) { apiError(res, error); }
   });
   // 氛围桌（NPC 常驻桌）管理：配置增删改后立即触发一次 heal，不等下个巡检周期。
   app.get('/api/admin/npc-tables', (req, res) => {
@@ -1062,6 +1083,11 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
   // NPC 头像交易行情：开箱 / 上架 / 捡漏购买，独立于氛围桌开关。
   const npcMarketTimer = setInterval(() => npcMarket.npcMarketTick(db), 300000);
   npcMarketTimer.unref();
+  // 在线人数采样：每 5 分钟记一条，供后台折线图使用。
+  const onlineSampleTimer = setInterval(() => {
+    try { adminOps.recordOnlineSample(db, io.engine.clientsCount); } catch { /* 采样失败忽略 */ }
+  }, 300000);
+  onlineSampleTimer.unref();
   // 全服定时发钱：每天 0:00 与 18:00 发放 10k（幂等，重启补发同一批次不会重复）。
   let dailyGrantTimer = null;
   const scheduleDailyGrant = () => {
@@ -1506,6 +1532,7 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       zjh.close();
       clearInterval(npcHealTimer);
       clearInterval(npcMarketTimer);
+      clearInterval(onlineSampleTimer);
       clearTimeout(dailyGrantTimer);
       for (const room of rooms.values()) {
         clearTurn(room);

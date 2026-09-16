@@ -30,6 +30,44 @@ function publicPrize(avatarId) {
   return item ? { id: item.id, name: item.name, src: item.src, series: item.series } : null;
 }
 
+// ---------- 后台可调配置（存 app_settings，缺省用代码常量） ----------
+const SETTING_WIN_BP = 'treasure.winBasisPoints';
+const SETTING_DISABLED_PRIZES = 'treasure.disabledPrizes';
+
+export function settingValue(db, key) {
+  const row = db?.prepare('SELECT value FROM app_settings WHERE key = ?').get(key);
+  return row ? row.value : null;
+}
+
+export function setSetting(db, key, value) {
+  db.prepare(`INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
+    .run(key, String(value), Date.now());
+}
+
+// 生效的中奖概率（万分比）：后台可改，范围 0–10000。
+export function effectiveWinBasisPoints(db) {
+  const raw = settingValue(db, SETTING_WIN_BP);
+  if (raw === null) return WIN_BASIS_POINTS;
+  const value = Number(raw);
+  return Number.isSafeInteger(value) && value >= 0 && value <= BASIS_POINTS ? value : WIN_BASIS_POINTS;
+}
+
+// 生效的奖池：后台可停用部分头像；至少保留 1 个，全部停用时回退为全量。
+export function effectivePrizes(db) {
+  const raw = settingValue(db, SETTING_DISABLED_PRIZES);
+  let disabled = new Set();
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) disabled = new Set(parsed.filter((id) => typeof id === 'string'));
+    } catch { /* 格式损坏时视为未停用 */ }
+  }
+  const all = globalThis.TONGZHUO_AVATARS.prizeItems;
+  const active = all.filter((item) => !disabled.has(item.id));
+  return active.length ? active : all;
+}
+
 // 7 天未成交的 ACTIVE 订单统一置为 EXPIRED（头像退回卖家，上架费不退）。
 // 惰性清理：每次读交易市场/库存/上架前调用，保证玩家看到的状态始终新鲜。
 function sweepExpiredListings(db, now = Date.now()) {
@@ -109,23 +147,25 @@ function openResult(row, balance, duplicate = false) {
   };
 }
 
-export function config() {
+export function config(db) {
+  const prizes = effectivePrizes(db);
+  const winBp = effectiveWinBasisPoints(db);
   return {
     price: BOX_PRICE,
     tenOpenCount: TEN_OPEN_COUNT,
     tenOpenPrice: TEN_OPEN_PRICE,
-    winBasisPoints: WIN_BASIS_POINTS,
+    winBasisPoints: winBp,
     basisPoints: BASIS_POINTS,
-    winRate: WIN_BASIS_POINTS / BASIS_POINTS,
+    winRate: winBp / BASIS_POINTS,
     marketFeeRate: MARKET_FEE_BASIS_POINTS / BASIS_POINTS,
     listingFeeRate: LISTING_FEE_BASIS_POINTS / BASIS_POINTS,
     listingTtlMs: LISTING_TTL_MS,
-    prizes: globalThis.TONGZHUO_AVATARS.prizeItems.map(item => ({
+    prizes: prizes.map(item => ({
       id: item.id,
       name: item.name,
       src: item.src,
       series: item.series,
-      probability: WIN_BASIS_POINTS / BASIS_POINTS / globalThis.TONGZHUO_AVATARS.prizeItems.length,
+      probability: winBp / BASIS_POINTS / prizes.length,
     })),
   };
 }
@@ -165,10 +205,9 @@ export function openTen(db, accountId, batchId) {
   })();
 }
 
-export function resolveDraw(hitRoll, avatarRoll) {
+export function resolveDraw(hitRoll, avatarRoll, prizes = globalThis.TONGZHUO_AVATARS.prizeItems, winBp = WIN_BASIS_POINTS) {
   requireThat(Number.isSafeInteger(hitRoll) && hitRoll >= 0 && hitRoll < BASIS_POINTS, '开奖随机数不正确');
-  if (hitRoll >= WIN_BASIS_POINTS) return null;
-  const prizes = globalThis.TONGZHUO_AVATARS.prizeItems;
+  if (hitRoll >= winBp) return null;
   requireThat(Number.isSafeInteger(avatarRoll) && avatarRoll >= 0 && avatarRoll < prizes.length, '头像随机数不正确');
   return prizes[avatarRoll];
 }
@@ -183,8 +222,8 @@ export function openBox(db, accountId, openId, { allowNpc = false } = {}) {
     requireThat(allowNpc || !account.npc, '系统账号不能开启头像宝箱');
     requireThat(balanceOf(db, accountId) >= BOX_PRICE, '筹码余额不足');
 
-    const prizes = globalThis.TONGZHUO_AVATARS.prizeItems;
-    const selected = resolveDraw(randomInt(BASIS_POINTS), randomInt(prizes.length));
+    const prizes = effectivePrizes(db);
+    const selected = resolveDraw(randomInt(BASIS_POINTS), randomInt(prizes.length), prizes, effectiveWinBasisPoints(db));
     const itemId = selected ? randomUUID() : null;
     const createdAt = Date.now();
     credit(db, accountId, 'TREASURE_OPEN', -BOX_PRICE, 'treasure-open', openId);

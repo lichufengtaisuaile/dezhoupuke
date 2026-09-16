@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="robots" content="noindex" />
-    <meta name="description" content="同桌平台管理后台：用户、资金、封禁与审计" />
+    <meta name="description" content="同桌平台管理后台" />
     <title>管理后台 | 同桌</title>
     <link rel="icon" type="image/png" href="/brand/tongzhuo-cat-favicon.png" />
     <link rel="stylesheet" href="../style.css" />
@@ -12,140 +12,97 @@
     <link rel="stylesheet" href="admin.css" />
   </head>
   <body>
-    <div class="admin-shell">
-      <header class="admin-head">
-        <div>
-          <h1>管理后台</h1>
-          <p class="admin-sub">仅供管理员 · 所有操作都会写入审计日志</p>
+    <!-- 令牌校验门 -->
+    <section class="admin-gate" id="gate">
+      <form id="gateForm" class="admin-gate-form">
+        <h1>管理后台</h1>
+        <label for="tokenInput">管理员令牌</label>
+        <div class="admin-gate-row">
+          <input id="tokenInput" type="password" placeholder="DEZHOU_ADMIN_TOKEN" autocomplete="off" required />
+          <button type="submit" class="button primary">验证并进入</button>
         </div>
-        <button type="button" class="button secondary admin-logout" id="logoutButton" hidden>清除令牌</button>
-      </header>
+        <p class="admin-gate-error" id="gateError" role="alert" hidden></p>
+      </form>
+    </section>
 
-      <!-- 令牌校验门：未配置/未登录时显示 -->
-      <section class="admin-gate" id="gate">
-        <form id="gateForm" class="admin-gate-form">
-          <label for="tokenInput">管理员令牌</label>
-          <div class="admin-gate-row">
-            <input id="tokenInput" type="password" placeholder="DEZHOU_ADMIN_TOKEN" autocomplete="off" required />
-            <button type="submit" class="button primary">验证并进入</button>
-          </div>
-          <p class="admin-gate-error" id="gateError" role="alert" hidden></p>
-        </form>
-      </section>
+    <!-- 主界面：左侧导航 + 内容区 -->
+    <div class="admin-app" id="app" hidden>
+      <aside class="admin-side">
+        <div class="admin-side-brand">
+          <img src="/brand/tongzhuo-cat-favicon.png" alt="" />
+          <div><strong>同桌后台</strong><span>仅管理员</span></div>
+        </div>
+        <nav class="admin-nav" id="nav">
+          <button type="button" class="admin-nav-item is-active" data-page="dashboard">总览</button>
+          <button type="button" class="admin-nav-item" data-page="players">玩家管理</button>
+          <button type="button" class="admin-nav-item" data-page="market">交易行监管</button>
+          <button type="button" class="admin-nav-item" data-page="treasure">宝箱与奖品</button>
+          <button type="button" class="admin-nav-item" data-page="system">系统设置</button>
+        </nav>
+        <button type="button" class="button secondary admin-logout" id="logoutButton">清除令牌</button>
+      </aside>
 
-      <!-- 主面板 -->
-      <main id="panel" hidden>
-        <section class="admin-broadcast" aria-labelledby="broadcastTitle">
-          <div class="admin-broadcast-head">
-            <div>
-              <h2 id="broadcastTitle">全服发放筹码</h2>
-              <p>发给所有正常的普通账号；封禁账号和系统 NPC 不参与。操作会写入审计与每位用户的筹码明细。</p>
+      <main class="admin-main">
+        <!-- 总览 -->
+        <section class="admin-page is-active" data-page-panel="dashboard">
+          <h2>总览</h2>
+          <div class="admin-stat-grid" id="statGrid"></div>
+          <div class="admin-chart-grid">
+            <div class="admin-chart-card">
+              <h3>在线人数（近 24 小时）</h3>
+              <svg id="onlineChart" class="admin-chart" viewBox="0 0 600 200" preserveAspectRatio="none"></svg>
+              <p class="admin-chart-empty" id="onlineChartEmpty" hidden>还没有采样数据，每 5 分钟记录一次</p>
             </div>
-            <span class="admin-count" id="broadcastRecipients">正在读取领取人数…</span>
+            <div class="admin-chart-card">
+              <h3>每日新增注册（近 30 天）</h3>
+              <svg id="regChart" class="admin-chart" viewBox="0 0 600 200" preserveAspectRatio="none"></svg>
+            </div>
           </div>
-          <form id="broadcastForm" class="admin-broadcast-form">
-            <label>每人金额 <input id="broadcastAmount" type="number" min="1" max="1000000" step="1" inputmode="numeric" required /></label>
-            <label>发放原因 <input id="broadcastReason" type="text" maxlength="100" required /></label>
-            <button type="submit" class="button primary" id="broadcastSubmit">发放筹码</button>
-          </form>
-          <p class="admin-gate-error" id="broadcastError" role="alert" hidden></p>
         </section>
 
-        <section class="admin-npc">
-          <div class="admin-npc-head">
-            <h2>氛围桌</h2>
-            <span class="admin-count" id="npcHint"></span>
+        <!-- 玩家管理 -->
+        <section class="admin-page" data-page-panel="players">
+          <h2>玩家管理</h2>
+          <div class="admin-toolbar">
+            <input id="searchInput" type="search" placeholder="按昵称搜索…" aria-label="按昵称搜索" />
+            <label class="admin-sort-label" for="sortSelect">排序
+              <select id="sortSelect">
+                <option value="createdAt">注册时间</option>
+                <option value="totalAssets">总资产</option>
+                <option value="balance">可用余额</option>
+                <option value="tableStack">桌上筹码</option>
+                <option value="netProfit">净盈亏</option>
+                <option value="handsPlayed">德州手数</option>
+                <option value="slotSpins">老虎机次数</option>
+                <option value="name">昵称</option>
+              </select>
+            </label>
+            <label class="admin-sort-label" for="orderSelect">顺序
+              <select id="orderSelect">
+                <option value="desc">从高到低</option>
+                <option value="asc">从低到高</option>
+              </select>
+            </label>
+            <span class="admin-count" id="usersCount"></span>
           </div>
-          <form id="npcForm" class="admin-npc-form">
-            <label>小盲 <input id="npcSmallBlind" type="number" min="1" step="1" value="5" required /></label>
-            <label>大盲 <input id="npcBigBlind" type="number" min="2" step="1" value="10" required /></label>
-            <label>桌上目标 <input id="npcBuyIn" type="number" min="200" step="10" value="500" required /></label>
-            <label>最大人数
-              <select id="npcMaxSeats">
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-                <option value="5">5</option>
-                <option value="6" selected>6</option>
-              </select>
-            </label>
-            <label>保留空位
-              <select id="npcKeepVacant">
-                <option value="1" selected>1</option>
-                <option value="2">2</option>
-              </select>
-            </label>
-            <button type="submit" class="button primary">添加氛围桌</button>
-          </form>
           <div class="admin-table-wrap">
             <table class="admin-table">
               <thead>
                 <tr>
-                  <th>房间号</th>
-                  <th>盲注</th>
-                  <th>桌上目标</th>
-                  <th>人数/空位</th>
-                  <th>实时入座</th>
-                  <th>启用</th>
-                  <th>操作</th>
+                  <th>昵称</th><th>状态</th><th>可用余额</th><th>桌上</th><th>总资产</th>
+                  <th>手数</th><th>老虎机</th><th>净盈亏</th><th>注册时间</th><th>操作</th>
                 </tr>
               </thead>
-              <tbody id="npcBody"></tbody>
+              <tbody id="usersBody"></tbody>
             </table>
-            <p class="admin-empty" id="npcEmpty" hidden>还没有氛围桌，用上方表单添加</p>
+            <p class="admin-empty" id="usersEmpty" hidden>没有匹配的用户</p>
           </div>
+          <div class="admin-pager" id="usersPager" hidden></div>
         </section>
 
-        <div class="admin-toolbar">
-          <input id="searchInput" type="search" placeholder="按昵称搜索…" aria-label="按昵称搜索" />
-          <label class="admin-sort-label" for="sortSelect">排序
-            <select id="sortSelect">
-              <option value="createdAt">注册时间</option>
-              <option value="totalAssets">总资产</option>
-              <option value="balance">可用余额</option>
-              <option value="tableStack">桌上筹码</option>
-              <option value="netProfit">净盈亏</option>
-              <option value="handsPlayed">德州手数</option>
-              <option value="slotSpins">老虎机次数</option>
-              <option value="name">昵称</option>
-            </select>
-          </label>
-          <label class="admin-sort-label" for="orderSelect">顺序
-            <select id="orderSelect">
-              <option value="desc">从高到低</option>
-              <option value="asc">从低到高</option>
-            </select>
-          </label>
-          <span class="admin-count" id="usersCount"></span>
-        </div>
-
-        <div class="admin-table-wrap">
-          <table class="admin-table">
-            <thead>
-              <tr>
-                <th>昵称</th>
-                <th>状态</th>
-                <th>可用余额</th>
-                <th>桌上</th>
-                <th>总资产</th>
-                <th>手数</th>
-                <th>老虎机</th>
-                <th>净盈亏</th>
-                <th>注册时间</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody id="usersBody"></tbody>
-          </table>
-          <p class="admin-empty" id="usersEmpty" hidden>没有匹配的用户</p>
-        </div>
-        <div class="admin-pager" id="usersPager" hidden></div>
-
-        <section class="admin-audit">
-          <div class="admin-audit-head">
-            <h2>交易行监管</h2>
-            <span class="admin-count" id="marketCount"></span>
-          </div>
+        <!-- 交易行监管 -->
+        <section class="admin-page" data-page-panel="market">
+          <h2>交易行监管</h2>
           <div class="admin-toolbar">
             <input id="marketSearch" type="search" placeholder="按卖家/买家/头像搜索…" aria-label="搜索交易订单" />
             <label class="admin-sort-label" for="marketStatus">状态
@@ -159,18 +116,13 @@
               </select>
             </label>
             <button type="button" class="button secondary" id="marketRefresh">刷新</button>
+            <span class="admin-count" id="marketCount"></span>
           </div>
           <div class="admin-table-wrap">
             <table class="admin-table">
               <thead>
                 <tr>
-                  <th>头像</th>
-                  <th>价格</th>
-                  <th>卖家</th>
-                  <th>买家</th>
-                  <th>状态</th>
-                  <th>时间</th>
-                  <th>操作</th>
+                  <th>头像</th><th>价格</th><th>卖家</th><th>买家</th><th>状态</th><th>时间</th><th>操作</th>
                 </tr>
               </thead>
               <tbody id="marketBody"></tbody>
@@ -180,14 +132,94 @@
           <div class="admin-pager" id="marketPager" hidden></div>
         </section>
 
-        <section class="admin-audit">
-          <div class="admin-audit-head">
-            <h2>审计日志</h2>
-            <span class="admin-count" id="auditCount"></span>
+        <!-- 宝箱与奖品 -->
+        <section class="admin-page" data-page-panel="treasure">
+          <h2>宝箱与奖品</h2>
+          <div class="admin-broadcast" style="margin-bottom: 18px;">
+            <div class="admin-broadcast-head">
+              <div>
+                <h3 style="margin: 0;">中奖概率</h3>
+                <p>每次开箱抽中头像的概率。奖池内每个头像等概率，单个概率 = 总爆率 ÷ 启用头像数。</p>
+              </div>
+            </div>
+            <form id="winRateForm" class="admin-broadcast-form">
+              <label>爆率（%）<input id="winRateInput" type="number" min="0" max="100" step="0.1" required /></label>
+              <button type="submit" class="button primary">保存爆率</button>
+            </form>
+            <p class="admin-gate-error" id="winRateError" role="alert" hidden></p>
+            <p class="admin-count" id="winRateHint"></p>
           </div>
-          <ul class="admin-audit-list" id="auditList"></ul>
-          <p class="admin-empty" id="auditEmpty" hidden>还没有审计记录</p>
-          <div class="admin-pager" id="auditPager" hidden></div>
+          <div class="admin-treasure-head">
+            <h3>奖池（点击头像启用/停用，至少保留 1 个）</h3>
+            <span class="admin-count" id="treasureSaveHint"></span>
+          </div>
+          <div class="admin-prize-grid" id="prizeGrid"></div>
+        </section>
+
+        <!-- 系统设置 -->
+        <section class="admin-page" data-page-panel="system">
+          <h2>系统设置</h2>
+
+          <section class="admin-broadcast" aria-labelledby="broadcastTitle">
+            <div class="admin-broadcast-head">
+              <div>
+                <h3 id="broadcastTitle" style="margin: 0;">全服发放筹码</h3>
+                <p>发给所有正常的普通账号；封禁账号和系统 NPC 不参与。操作会写入审计与每位用户的筹码明细。</p>
+              </div>
+              <span class="admin-count" id="broadcastRecipients">正在读取领取人数…</span>
+            </div>
+            <form id="broadcastForm" class="admin-broadcast-form">
+              <label>每人金额 <input id="broadcastAmount" type="number" min="1" max="1000000" step="1" inputmode="numeric" required /></label>
+              <label>发放原因 <input id="broadcastReason" type="text" maxlength="100" required /></label>
+              <button type="submit" class="button primary" id="broadcastSubmit">发放筹码</button>
+            </form>
+            <p class="admin-gate-error" id="broadcastError" role="alert" hidden></p>
+          </section>
+
+          <section class="admin-npc">
+            <div class="admin-npc-head">
+              <h3>氛围桌</h3>
+              <span class="admin-count" id="npcHint"></span>
+            </div>
+            <form id="npcForm" class="admin-npc-form">
+              <label>小盲 <input id="npcSmallBlind" type="number" min="1" step="1" value="5" required /></label>
+              <label>大盲 <input id="npcBigBlind" type="number" min="2" step="1" value="10" required /></label>
+              <label>桌上目标 <input id="npcBuyIn" type="number" min="200" step="10" value="500" required /></label>
+              <label>最大人数
+                <select id="npcMaxSeats">
+                  <option value="2">2</option><option value="3">3</option><option value="4">4</option>
+                  <option value="5">5</option><option value="6" selected>6</option>
+                </select>
+              </label>
+              <label>保留空位
+                <select id="npcKeepVacant">
+                  <option value="1" selected>1</option><option value="2">2</option>
+                </select>
+              </label>
+              <button type="submit" class="button primary">添加氛围桌</button>
+            </form>
+            <div class="admin-table-wrap">
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th>房间号</th><th>盲注</th><th>桌上目标</th><th>人数/空位</th><th>实时入座</th><th>启用</th><th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="npcBody"></tbody>
+              </table>
+              <p class="admin-empty" id="npcEmpty" hidden>还没有氛围桌，用上方表单添加</p>
+            </div>
+          </section>
+
+          <section class="admin-audit">
+            <div class="admin-audit-head">
+              <h3>审计日志</h3>
+              <span class="admin-count" id="auditCount"></span>
+            </div>
+            <ul class="admin-audit-list" id="auditList"></ul>
+            <p class="admin-empty" id="auditEmpty" hidden>还没有审计记录</p>
+            <div class="admin-pager" id="auditPager" hidden></div>
+          </section>
         </section>
       </main>
     </div>
@@ -196,14 +228,8 @@
     <dialog class="admin-dialog" id="adjustDialog">
       <form method="dialog" class="admin-dialog-form" id="adjustForm">
         <h2>调整资金 · <span id="adjustTarget"></span></h2>
-        <label>
-          金额（正数增加 / 负数扣减，整数）
-          <input id="adjustAmount" type="number" step="1" required />
-        </label>
-        <label>
-          原因（必填，计入审计）
-          <input id="adjustReason" type="text" maxlength="100" required />
-        </label>
+        <label>金额（正数增加 / 负数扣减，整数）<input id="adjustAmount" type="number" step="1" required /></label>
+        <label>原因（必填，计入审计）<input id="adjustReason" type="text" maxlength="100" required /></label>
         <p class="admin-gate-error" id="adjustError" role="alert" hidden></p>
         <div class="admin-dialog-actions">
           <button type="button" class="button secondary" id="adjustCancel">取消</button>
@@ -216,14 +242,8 @@
       <form method="dialog" class="admin-dialog-form" id="passwordForm">
         <h2>设置密码 · <span id="passwordTarget"></span></h2>
         <p class="admin-dialog-note">保存后旧密码立即失效，该账号需要使用新密码重新登录。</p>
-        <label>
-          新密码（6–64 个字符）
-          <input id="passwordValue" type="password" minlength="6" maxlength="64" autocomplete="new-password" required />
-        </label>
-        <label>
-          再次输入新密码
-          <input id="passwordConfirm" type="password" minlength="6" maxlength="64" autocomplete="new-password" required />
-        </label>
+        <label>新密码（6–64 个字符）<input id="passwordValue" type="password" minlength="6" maxlength="64" autocomplete="new-password" required /></label>
+        <label>再次输入新密码<input id="passwordConfirm" type="password" minlength="6" maxlength="64" autocomplete="new-password" required /></label>
         <p class="admin-gate-error" id="passwordError" role="alert" hidden></p>
         <div class="admin-dialog-actions">
           <button type="button" class="button secondary" id="passwordCancel">取消</button>
@@ -232,16 +252,11 @@
       </form>
     </dialog>
 
-    <div class="toast" id="toast" role="status" hidden></div>
-
     <dialog class="admin-dialog" id="marketReasonDialog">
       <form method="dialog" class="admin-dialog-form" id="marketReasonForm">
         <h2 id="marketReasonTitle">交易监管</h2>
         <p class="admin-dialog-note" id="marketReasonNote"></p>
-        <label>
-          原因（必填，计入审计）
-          <input id="marketReasonValue" type="text" maxlength="100" required />
-        </label>
+        <label>原因（必填，计入审计）<input id="marketReasonValue" type="text" maxlength="100" required /></label>
         <p class="admin-gate-error" id="marketReasonError" role="alert" hidden></p>
         <div class="admin-dialog-actions">
           <button type="button" class="button secondary" id="marketReasonCancel">取消</button>
@@ -249,6 +264,8 @@
         </div>
       </form>
     </dialog>
+
+    <div class="toast" id="toast" role="status" hidden></div>
 
     <script src="admin.js"></script>
   </body>

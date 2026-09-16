@@ -1,20 +1,6 @@
 "use strict";
 
-function compactNumber(value) {
-  const num = Number(value || 0);
-  if (Math.abs(num) >= 1000000) {
-    const m = num / 1000000;
-    return `${m >= 100 ? Math.round(m) : Math.round(m * 10) / 10}M`;
-  }
-  if (Math.abs(num) >= 1000) {
-    const k = num / 1000;
-    return `${k >= 100 ? Math.round(k) : Math.round(k * 10) / 10}K`;
-  }
-  return num.toLocaleString("zh-CN");
-}
-"use strict";
-
-// 管理后台：令牌存 sessionStorage，调 GET /api/admin/users 成功即视为有效。
+// 管理后台：左侧导航多页布局。令牌存 sessionStorage，调 GET /api/admin/users 成功即视为有效。
 (() => {
   const TOKEN_KEY = "dezhou-admin-token";
   const $ = (id) => document.getElementById(id);
@@ -24,34 +10,23 @@ function compactNumber(value) {
     gateForm: $("gateForm"),
     tokenInput: $("tokenInput"),
     gateError: $("gateError"),
-    panel: $("panel"),
+    app: $("app"),
+    nav: $("nav"),
     logoutButton: $("logoutButton"),
-    npcHint: $("npcHint"),
-    npcForm: $("npcForm"),
-    npcSmallBlind: $("npcSmallBlind"),
-    npcBigBlind: $("npcBigBlind"),
-    npcBuyIn: $("npcBuyIn"),
-    npcMaxSeats: $("npcMaxSeats"),
-    npcKeepVacant: $("npcKeepVacant"),
-    npcBody: $("npcBody"),
-    npcEmpty: $("npcEmpty"),
-    broadcastForm: $("broadcastForm"),
-    broadcastAmount: $("broadcastAmount"),
-    broadcastReason: $("broadcastReason"),
-    broadcastRecipients: $("broadcastRecipients"),
-    broadcastSubmit: $("broadcastSubmit"),
-    broadcastError: $("broadcastError"),
+    // 总览
+    statGrid: $("statGrid"),
+    onlineChart: $("onlineChart"),
+    onlineChartEmpty: $("onlineChartEmpty"),
+    regChart: $("regChart"),
+    // 玩家
     searchInput: $("searchInput"),
     sortSelect: $("sortSelect"),
     orderSelect: $("orderSelect"),
     usersCount: $("usersCount"),
     usersBody: $("usersBody"),
     usersEmpty: $("usersEmpty"),
-    auditList: $("auditList"),
-    auditEmpty: $("auditEmpty"),
-    auditCount: $("auditCount"),
-    auditPager: $("auditPager"),
     usersPager: $("usersPager"),
+    // 交易行
     marketBody: $("marketBody"),
     marketEmpty: $("marketEmpty"),
     marketCount: $("marketCount"),
@@ -67,6 +42,34 @@ function compactNumber(value) {
     marketReasonError: $("marketReasonError"),
     marketReasonCancel: $("marketReasonCancel"),
     marketReasonSubmit: $("marketReasonSubmit"),
+    // 宝箱
+    winRateForm: $("winRateForm"),
+    winRateInput: $("winRateInput"),
+    winRateError: $("winRateError"),
+    winRateHint: $("winRateHint"),
+    prizeGrid: $("prizeGrid"),
+    treasureSaveHint: $("treasureSaveHint"),
+    // 系统
+    npcHint: $("npcHint"),
+    npcForm: $("npcForm"),
+    npcSmallBlind: $("npcSmallBlind"),
+    npcBigBlind: $("npcBigBlind"),
+    npcBuyIn: $("npcBuyIn"),
+    npcMaxSeats: $("npcMaxSeats"),
+    npcKeepVacant: $("npcKeepVacant"),
+    npcBody: $("npcBody"),
+    npcEmpty: $("npcEmpty"),
+    broadcastForm: $("broadcastForm"),
+    broadcastAmount: $("broadcastAmount"),
+    broadcastReason: $("broadcastReason"),
+    broadcastRecipients: $("broadcastRecipients"),
+    broadcastSubmit: $("broadcastSubmit"),
+    broadcastError: $("broadcastError"),
+    auditList: $("auditList"),
+    auditEmpty: $("auditEmpty"),
+    auditCount: $("auditCount"),
+    auditPager: $("auditPager"),
+    // 对话框
     adjustDialog: $("adjustDialog"),
     adjustForm: $("adjustForm"),
     adjustTarget: $("adjustTarget"),
@@ -94,10 +97,21 @@ function compactNumber(value) {
   let passwordUserId = null;
   let broadcastRequestId = null;
   let toastTimer = null;
+  let treasureConfig = null; // 奖池启用状态缓存（点击头像时本地翻转后提交）
 
-  function fmtMoney(value) {
-    return compactNumber(value);
+  function compactNumber(value) {
+    const num = Number(value || 0);
+    if (Math.abs(num) >= 1000000) {
+      const m = num / 1000000;
+      return `${m >= 100 ? Math.round(m) : Math.round(m * 10) / 10}M`;
+    }
+    if (Math.abs(num) >= 1000) {
+      const k = num / 1000;
+      return `${k >= 100 ? Math.round(k) : Math.round(k * 10) / 10}K`;
+    }
+    return num.toLocaleString("zh-CN");
   }
+  function fmtMoney(value) { return compactNumber(value); }
   function fmtTime(value) {
     const date = new Date(Number(value) || 0);
     if (Number.isNaN(date.getTime())) return "—";
@@ -143,8 +157,7 @@ function compactNumber(value) {
   // ---------- 令牌门 ----------
   function showGate(message) {
     elements.gate.hidden = false;
-    elements.panel.hidden = true;
-    elements.logoutButton.hidden = true;
+    elements.app.hidden = true;
     if (message) {
       elements.gateError.textContent = message;
       elements.gateError.hidden = false;
@@ -152,11 +165,30 @@ function compactNumber(value) {
       elements.gateError.hidden = true;
     }
   }
-  function showPanel() {
+  function showApp() {
     elements.gate.hidden = true;
-    elements.panel.hidden = false;
-    elements.logoutButton.hidden = false;
+    elements.app.hidden = false;
   }
+
+  // ---------- 页面切换 ----------
+  const PAGE_LOADERS = {
+    dashboard: loadDashboard,
+    players: () => loadUsers(usersCurrentPage),
+    market: () => loadMarket(marketCurrentPage),
+    treasure: loadTreasureConfig,
+    system: () => Promise.all([loadNpcTables(), loadBroadcastRecipients(), loadAudit(1)]),
+  };
+  function switchPage(page) {
+    document.querySelectorAll(".admin-nav-item").forEach((item) =>
+      item.classList.toggle("is-active", item.dataset.page === page));
+    document.querySelectorAll("[data-page-panel]").forEach((panel) =>
+      panel.classList.toggle("is-active", panel.dataset.pagePanel === page));
+    PAGE_LOADERS[page]?.().catch((error) => toast(error.message, true));
+  }
+  elements.nav.addEventListener("click", (event) => {
+    const item = event.target.closest("[data-page]");
+    if (item) switchPage(item.dataset.page);
+  });
 
   elements.gateForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -165,9 +197,9 @@ function compactNumber(value) {
     try {
       await adminApi("/api/admin/users?page=1");
       sessionStorage.setItem(TOKEN_KEY, token);
-      showPanel();
+      showApp();
       startNpcPolling();
-      await Promise.all([loadUsers(), loadAudit(1), loadNpcTables(), loadBroadcastRecipients(), loadMarket(1)]);
+      switchPage("dashboard");
     } catch (error) {
       sessionStorage.removeItem(TOKEN_KEY);
       token = "";
@@ -180,6 +212,60 @@ function compactNumber(value) {
     elements.tokenInput.value = "";
     showGate();
   });
+
+  // ---------- 总览 ----------
+  function renderLineChart(svg, points, { labels = [] } = {}) {
+    // points: [{x: label, y: number}]，纯 SVG 折线 + 底部文字
+    const width = 600, height = 200, padX = 34, padY = 18;
+    svg.innerHTML = "";
+    if (!points.length) return;
+    const values = points.map((p) => p.y);
+    const max = Math.max(...values, 1);
+    const innerW = width - padX * 2, innerH = height - padY * 2;
+    const xAt = (i) => padX + (points.length === 1 ? innerW / 2 : (i / (points.length - 1)) * innerW);
+    const yAt = (v) => padY + innerH - (v / max) * innerH;
+    let grid = "";
+    for (let g = 0; g <= 4; g += 1) {
+      const y = padY + (g / 4) * innerH;
+      const val = Math.round(max * (1 - g / 4));
+      grid += `<line x1="${padX}" y1="${y}" x2="${width - padX}" y2="${y}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>`;
+      grid += `<text x="${padX - 6}" y="${y + 4}" text-anchor="end" font-size="10" fill="rgba(255,255,255,0.45)">${compactNumber(val)}</text>`;
+    }
+    const path = points.map((p, i) => `${i === 0 ? "M" : "L"}${xAt(i).toFixed(1)},${yAt(p.y).toFixed(1)}`).join(" ");
+    const area = `${path} L${xAt(points.length - 1).toFixed(1)},${padY + innerH} L${padX},${padY + innerH} Z`;
+    let dots = "";
+    points.forEach((p, i) => {
+      dots += `<circle cx="${xAt(i).toFixed(1)}" cy="${yAt(p.y).toFixed(1)}" r="2.4" fill="#5ee0a0"><title>${esc(p.x)}：${p.y}</title></circle>`;
+    });
+    let axis = "";
+    const step = Math.max(1, Math.ceil(points.length / 6));
+    points.forEach((p, i) => {
+      if (i % step !== 0 && i !== points.length - 1) return;
+      axis += `<text x="${xAt(i).toFixed(1)}" y="${height - 4}" text-anchor="middle" font-size="10" fill="rgba(255,255,255,0.45)">${esc(String(p.x).slice(5))}</text>`;
+    });
+    svg.innerHTML = `${grid}<path d="${area}" fill="rgba(94,224,160,0.12)"/><path d="${path}" fill="none" stroke="#5ee0a0" stroke-width="2"/>${dots}${axis}`;
+  }
+
+  async function loadDashboard() {
+    const data = await adminApi("/api/admin/dashboard");
+    const stats = [
+      { label: "普通玩家", value: data.players },
+      { label: "账号总数（含 NPC）", value: data.accounts },
+      { label: "全服筹码总量", value: fmtMoney(data.totalChips) },
+      { label: "进行中房间", value: data.activeRooms },
+      { label: "今日开箱", value: data.opensToday },
+      { label: "今日成交", value: `${data.marketDealsToday} 笔 / ${fmtMoney(data.marketVolumeToday)}` },
+    ];
+    elements.statGrid.innerHTML = stats.map((item) => `
+      <div class="admin-stat-card"><span>${esc(item.label)}</span><strong>${esc(item.value)}</strong></div>`).join("");
+
+    const online = (data.online || []).map((row) => ({ x: fmtTime(row.time).slice(11), y: row.online }));
+    elements.onlineChartEmpty.hidden = online.length > 0;
+    renderLineChart(elements.onlineChart, online);
+
+    const regs = (data.registrations || []).map((row) => ({ x: row.day, y: row.players }));
+    renderLineChart(elements.regChart, regs);
+  }
 
   // ---------- 全服发放 ----------
   async function loadBroadcastRecipients() {
@@ -216,7 +302,7 @@ function compactNumber(value) {
       elements.broadcastForm.reset();
       broadcastRequestId = null;
       toast(`${result.replayed ? "已确认原批次：" : "已发放："}${fmtMoney(result.recipientCount)} 人，各 ${fmtMoney(result.amount)}，总计 ${fmtMoney(result.totalAmount)}`);
-      await Promise.all([loadUsers(usersCurrentPage), loadAudit(1), loadBroadcastRecipients()]);
+      await Promise.all([loadAudit(1), loadBroadcastRecipients()]);
     } catch (error) {
       elements.broadcastError.textContent = error.message;
       elements.broadcastError.hidden = false;
@@ -262,7 +348,10 @@ function compactNumber(value) {
   }
   function startNpcPolling() {
     stopNpcPolling();
-    npcTimer = setInterval(loadNpcTables, 10000);
+    npcTimer = setInterval(() => {
+      // 只在系统设置页轮询氛围桌，避免不必要的请求
+      if (document.querySelector('[data-page-panel="system"]').classList.contains("is-active")) loadNpcTables();
+    }, 10000);
   }
   function stopNpcPolling() {
     if (npcTimer) { clearInterval(npcTimer); npcTimer = null; }
@@ -309,57 +398,47 @@ function compactNumber(value) {
     }
   });
 
-  // ---------- 通用分页 ----------
-  // 页码窗口：首页/尾页 + 当前页前后各 2 页，中间用省略号；点击交给 onPage。
-  function renderPager(el, { page, pageSize, total, onPage }) {
-    const pages = Math.max(1, Math.ceil(total / pageSize));
-    if (pages <= 1) { el.hidden = true; el.innerHTML = ""; return; }
-    el.hidden = false;
-    const windowed = [];
-    for (let n = 1; n <= pages; n += 1) {
-      if (n === 1 || n === pages || Math.abs(n - page) <= 2) windowed.push(n);
+  // ---------- 玩家列表 ----------
+  function renderPager(container, { page, pageSize, total, onPage }) {
+    const pageCount = Math.max(1, Math.ceil(total / pageSize));
+    if (pageCount <= 1) { container.hidden = true; container.innerHTML = ""; return; }
+    container.hidden = false;
+    const buttons = [];
+    for (let i = 1; i <= pageCount; i += 1) {
+      if (pageCount > 9 && i > 2 && i < pageCount - 1 && Math.abs(i - page) > 1) {
+        if (buttons[buttons.length - 1] !== "…") buttons.push("…");
+        continue;
+      }
+      buttons.push(i);
     }
-    const nums = [];
-    let prev = 0;
-    for (const n of windowed) {
-      if (n - prev > 1) nums.push('<span class="admin-pager-gap">…</span>');
-      nums.push(`<button type="button" data-page="${n}"${n === page ? ' disabled class="admin-pager-current"' : ""}>${n}</button>`);
-      prev = n;
-    }
-    el.innerHTML = `
-      <span class="admin-pager-info">共 ${fmtMoney(total)} 条 · 第 ${page} / ${pages} 页</span>
-      <div class="admin-pager-nav">
-        <button type="button" data-page="${page - 1}"${page <= 1 ? " disabled" : ""}>‹ 上一页</button>
-        ${nums.join("")}
-        <button type="button" data-page="${page + 1}"${page >= pages ? " disabled" : ""}>下一页 ›</button>
-      </div>`;
-    el.onclick = (event) => {
-      const button = event.target.closest("button[data-page]");
-      if (!button || button.disabled) return;
-      onPage(Number(button.dataset.page));
+    container.innerHTML = buttons.map((item) => item === "…"
+      ? `<span class="admin-pager-gap">…</span>`
+      : `<button type="button" class="admin-pager-btn${item === page ? " is-current" : ""}" data-page-no="${item}">${item}</button>`).join("");
+    container.onclick = (event) => {
+      const btn = event.target.closest("[data-page-no]");
+      if (btn) onPage(Number(btn.dataset.pageNo));
     };
   }
 
-  // ---------- 用户列表 ----------
   async function loadUsers(page = 1) {
-    const q = elements.searchInput.value.trim();
-    const sort = elements.sortSelect.value;
-    const order = elements.orderSelect.value;
     try {
-      const data = await adminApi(`/api/admin/users?page=${page}&q=${encodeURIComponent(q)}&sort=${encodeURIComponent(sort)}&order=${encodeURIComponent(order)}`);
+      const params = new URLSearchParams({ page, sort: elements.sortSelect.value, order: elements.orderSelect.value });
+      const keyword = elements.searchInput.value.trim();
+      if (keyword) params.set("q", keyword);
+      const data = await adminApi(`/api/admin/users?${params}`);
       usersCurrentPage = data.page;
-      elements.usersCount.textContent = `共 ${data.total} 位用户`;
-      elements.usersEmpty.hidden = data.users.length > 0;
+      elements.usersCount.textContent = `共 ${data.total} 人`;
+      elements.usersEmpty.hidden = data.total > 0;
       elements.usersBody.innerHTML = data.users.map((user) => `
         <tr data-user-id="${esc(user.id)}">
-          <td><span class="admin-name">${esc(user.name)}</span>${user.isNpc ? '<span class="admin-badge is-npc" title="系统常驻 NPC（有真实经济身份，对外不可见）">NPC</span>' : ""}</td>
-          <td><span class="admin-badge${user.isBanned ? " is-banned" : ""}">${user.isBanned ? "已封禁" : "正常"}</span></td>
+          <td><span class="admin-name">${esc(user.name)}</span></td>
+          <td>${user.isBanned ? '<span class="admin-badge is-banned">封禁</span>' : user.npc ? '<span class="admin-badge">NPC</span>' : '<span class="admin-badge is-ok">正常</span>'}</td>
           <td>${fmtMoney(user.balance)}</td>
           <td>${fmtMoney(user.tableStack)}</td>
           <td>${fmtMoney(user.totalAssets)}</td>
           <td>${fmtMoney(user.handsPlayed)}</td>
           <td>${fmtMoney(user.slotSpins)}</td>
-          <td class="${user.netProfit > 0 ? "pos" : user.netProfit < 0 ? "neg" : ""}">${user.netProfit > 0 ? "+" : user.netProfit < 0 ? "−" : ""}${fmtMoney(Math.abs(user.netProfit))}</td>
+          <td class="${user.netProfit >= 0 ? "admin-profit" : "admin-loss"}">${user.netProfit >= 0 ? "+" : "−"}${fmtMoney(Math.abs(user.netProfit))}</td>
           <td>${fmtTime(user.createdAt)}</td>
           <td>
             <div class="admin-actions">
@@ -378,12 +457,12 @@ function compactNumber(value) {
 
   elements.searchInput.addEventListener("input", () => {
     clearTimeout(searchTimer);
-    searchTimer = setTimeout(loadUsers, 300);
+    searchTimer = setTimeout(() => loadUsers(1), 300);
   });
   elements.sortSelect.addEventListener("change", () => loadUsers(1));
   elements.orderSelect.addEventListener("change", () => loadUsers(1));
 
-  // ---------- 行操作 ----------
+  // ---------- 玩家行操作 ----------
   elements.usersBody.addEventListener("click", async (event) => {
     const button = event.target.closest("[data-action]");
     if (!button) return;
@@ -478,7 +557,11 @@ function compactNumber(value) {
   }
 
   // ---------- 审计日志 ----------
-  const ACTION_NAMES = { ADJUST_BALANCE: "调资金", BROADCAST_GRANT: "全服发放", BAN: "封禁", UNBAN: "解封", RESET_PASSWORD: "重置密码", MARKET_FORCE_DELIST: "强制下架", MARKET_REVERT_TRADE: "撤回交易" };
+  const ACTION_NAMES = {
+    ADJUST_BALANCE: "调资金", BROADCAST_GRANT: "全服发放", BAN: "封禁", UNBAN: "解封",
+    RESET_PASSWORD: "重置密码", MARKET_FORCE_DELIST: "强制下架", MARKET_REVERT_TRADE: "撤回交易",
+    TREASURE_CONFIG: "宝箱配置",
+  };
   function auditText(entry) {
     const detail = entry.detail || {};
     if (entry.action === "ADJUST_BALANCE") {
@@ -489,6 +572,12 @@ function compactNumber(value) {
     }
     if (entry.action === "RESET_PASSWORD") {
       return `旧登录态已注销 ${fmtMoney(detail.revokedSessions || 0)} 个`;
+    }
+    if (entry.action === "TREASURE_CONFIG") {
+      const parts = [];
+      if (detail.winBasisPoints !== undefined) parts.push(`爆率改为 ${detail.winBasisPoints / 100}%`);
+      if (detail.disabledPrizes) parts.push(`停用 ${detail.disabledPrizes.length} 个头像`);
+      return parts.join("；") || "—";
     }
     return esc(detail.reason || (detail.banned ? "封禁" : "解封"));
   }
@@ -532,9 +621,12 @@ function compactNumber(value) {
         if (listing.status === "SOLD") {
           actions.push(`<button type="button" class="admin-mini-button is-danger" data-market-revert="${esc(listing.id)}">撤回交易</button>`);
         }
+        const avatarCell = listing.avatar
+          ? `<div class="admin-avatar-cell"><img src="${esc(listing.avatar.src)}" alt="${esc(listing.avatar.name)}" loading="lazy" /><div><strong>${esc(listing.avatar.name)}</strong><span>${esc(listing.avatar.series || "")}</span></div></div>`
+          : esc(listing.avatarId);
         return `
         <tr>
-          <td>${esc(listing.avatarId)}</td>
+          <td>${avatarCell}</td>
           <td>${fmtMoney(listing.price)}</td>
           <td>${esc(listing.sellerName)}</td>
           <td>${esc(listing.buyerName || "—")}</td>
@@ -605,14 +697,99 @@ function compactNumber(value) {
     }
   });
 
+  // ---------- 宝箱与奖品 ----------
+  async function loadTreasureConfig() {
+    try {
+      treasureConfig = await adminApi("/api/admin/treasure-config");
+      elements.winRateInput.value = String(treasureConfig.winRate * 100);
+      renderTreasureHint();
+      renderPrizeGrid();
+    } catch (error) {
+      toast(error.message, true);
+    }
+  }
+  function renderTreasureHint() {
+    const enabled = treasureConfig.prizes.filter((p) => p.enabled).length;
+    const single = treasureConfig.winRate / enabled * 100;
+    elements.winRateHint.textContent =
+      `当前爆率 ${treasureConfig.winRate * 100}%（万分之 ${treasureConfig.winBasisPoints}）· 奖池 ${enabled}/${treasureConfig.totalCount} · 单个头像概率 ${single.toFixed(3)}%`;
+  }
+  function renderPrizeGrid() {
+    elements.prizeGrid.innerHTML = treasureConfig.prizes.map((prize) => `
+      <button type="button" class="admin-prize-card${prize.enabled ? "" : " is-disabled"}" data-prize-id="${esc(prize.id)}" title="${prize.enabled ? "点击停用" : "点击启用"}">
+        <img src="${esc(prize.src)}" alt="${esc(prize.name)}" loading="lazy" />
+        <strong>${esc(prize.name)}</strong>
+        <span>${esc(prize.series)}</span>
+        <em>${prize.enabled ? "已启用" : "已停用"}</em>
+      </button>`).join("");
+  }
+
+  elements.winRateForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    elements.winRateError.hidden = true;
+    const percent = Number(elements.winRateInput.value);
+    if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+      elements.winRateError.textContent = "爆率需要在 0–100 之间";
+      elements.winRateError.hidden = false;
+      return;
+    }
+    try {
+      treasureConfig = await adminApi("/api/admin/treasure-config", {
+        method: "POST",
+        body: JSON.stringify({ winBasisPoints: Math.round(percent * 100) }),
+      });
+      toast(`爆率已更新为 ${treasureConfig.winRate * 100}%`);
+      renderTreasureHint();
+      renderPrizeGrid();
+      await loadAudit(1);
+    } catch (error) {
+      elements.winRateError.textContent = error.message;
+      elements.winRateError.hidden = false;
+    }
+  });
+
+  elements.prizeGrid.addEventListener("click", async (event) => {
+    const card = event.target.closest("[data-prize-id]");
+    if (!card || !treasureConfig) return;
+    const id = card.dataset.prizeId;
+    const prize = treasureConfig.prizes.find((p) => p.id === id);
+    const enabledCount = treasureConfig.prizes.filter((p) => p.enabled).length;
+    if (prize.enabled && enabledCount <= 1) {
+      toast("奖池至少保留 1 个头像", true);
+      return;
+    }
+    // 本地先翻转并重新提交全量停用列表，失败则回滚
+    prize.enabled = !prize.enabled;
+    renderPrizeGrid();
+    renderTreasureHint();
+    elements.treasureSaveHint.textContent = "保存中…";
+    try {
+      treasureConfig = await adminApi("/api/admin/treasure-config", {
+        method: "POST",
+        body: JSON.stringify({ disabledPrizes: treasureConfig.prizes.filter((p) => !p.enabled).map((p) => p.id) }),
+      });
+      elements.treasureSaveHint.textContent = "";
+      toast(`${prize.enabled ? "已启用" : "已停用"}「${prize.name}」`);
+      renderTreasureHint();
+      renderPrizeGrid();
+      await loadAudit(1);
+    } catch (error) {
+      prize.enabled = !prize.enabled;
+      renderPrizeGrid();
+      renderTreasureHint();
+      elements.treasureSaveHint.textContent = "";
+      toast(error.message, true);
+    }
+  });
+
   // ---------- 启动 ----------
   (async () => {
     if (!token) { showGate(); return; }
     try {
       await adminApi("/api/admin/users?page=1");
-      showPanel();
+      showApp();
       startNpcPolling();
-      await Promise.all([loadUsers(), loadAudit(1), loadNpcTables(), loadBroadcastRecipients(), loadMarket(1)]);
+      switchPage("dashboard");
     } catch (error) {
       sessionStorage.removeItem(TOKEN_KEY);
       token = "";
@@ -620,3 +797,4 @@ function compactNumber(value) {
     }
   })();
 })();
+

@@ -2,7 +2,8 @@ import { GameError, requireThat } from './errors.js';
 import { credit, balanceOf } from './wallet.js';
 import { hasMahjongTable, tableAssets } from './stats.js';
 import { resetPassword as resetAccountPassword } from './account.js';
-import { adminForceDelist, adminRevertTrade } from './treasure.js';
+import { adminForceDelist, adminRevertTrade, effectivePrizes, effectiveWinBasisPoints, setSetting } from './treasure.js';
+import '../public/avatar-catalog.js';
 
 export const ADMIN_PAGE_SIZE = 20;
 const AUDIT_ADMIN = 'token';
@@ -226,7 +227,12 @@ export function marketPage(db, { status = '', q = '', page = 1 } = {}) {
     page: resolvedPage,
     pageSize: ADMIN_PAGE_SIZE,
     total,
-    listings: rows.slice(offset, offset + ADMIN_PAGE_SIZE),
+    listings: rows.slice(offset, offset + ADMIN_PAGE_SIZE).map((row) => ({
+      ...row,
+      avatar: globalThis.TONGZHUO_AVATARS.get(row.avatarId)
+        ? { ...globalThis.TONGZHUO_AVATARS.get(row.avatarId) }
+        : null,
+    })),
   };
 }
 
@@ -263,5 +269,108 @@ export function auditPage(db, page = 1) {
     pageSize: ADMIN_PAGE_SIZE,
     total,
     entries: rows.map((row) => ({ ...row, detail: row.detail ? JSON.parse(row.detail) : {} })),
+  };
+}
+
+// ---------- 宝箱配置（后台可调爆率与奖池） ----------
+
+export function treasureConfigPage(db) {
+  const active = effectivePrizes(db);
+  const activeIds = new Set(active.map(item => item.id));
+  const winBp = effectiveWinBasisPoints(db);
+  return {
+    winBasisPoints: winBp,
+    basisPoints: 10000,
+    winRate: winBp / 10000,
+    price: 5000,
+    activeCount: active.length,
+    totalCount: globalThis.TONGZHUO_AVATARS.prizeItems.length,
+    prizes: globalThis.TONGZHUO_AVATARS.prizeItems.map(item => ({
+      id: item.id, name: item.name, src: item.src, series: item.series,
+      enabled: activeIds.has(item.id),
+      probability: winBp / 10000 / active.length,
+    })),
+  };
+}
+
+export function updateTreasureConfig(db, { winBasisPoints = null, disabledPrizes = null } = {}) {
+  const changes = {};
+  if (winBasisPoints !== null && winBasisPoints !== undefined) {
+    requireThat(Number.isSafeInteger(winBasisPoints)
+      && winBasisPoints >= 0 && winBasisPoints <= 10000, '爆率需要在 0–100% 之间');
+    setSetting(db, 'treasure.winBasisPoints', winBasisPoints);
+    changes.winBasisPoints = winBasisPoints;
+  }
+  if (disabledPrizes !== null && disabledPrizes !== undefined) {
+    requireThat(Array.isArray(disabledPrizes), '奖池格式不正确');
+    const all = new Set(globalThis.TONGZHUO_AVATARS.prizeItems.map(item => item.id));
+    const list = [...new Set(disabledPrizes.filter(id => typeof id === 'string' && all.has(id)))];
+    requireThat(all.size - list.length >= 1, '奖池至少保留 1 个头像');
+    setSetting(db, 'treasure.disabledPrizes', JSON.stringify(list));
+    changes.disabledPrizes = list;
+  }
+  requireThat(Object.keys(changes).length > 0, '没有需要修改的配置');
+  writeAudit(db, 'TREASURE_CONFIG', '*', changes);
+  return treasureConfigPage(db);
+}
+
+// ---------- 数据看板 ----------
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function dayStartOf(now) {
+  const date = new Date(now);
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
+}
+
+// 近 N 天每日注册数（含 NPC，另给普通玩家数）。
+export function registrationSeries(db, days = 30, now = Date.now()) {
+  const start = dayStartOf(now) - (days - 1) * DAY_MS;
+  const rows = db.prepare(`SELECT created_at AS createdAt, npc FROM accounts WHERE created_at >= ?`)
+    .all(start);
+  const result = Array.from({ length: days }, (_, index) => {
+    const date = new Date(start + index * DAY_MS);
+    const day = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    return { day, total: 0, players: 0 };
+  });
+  const bucket = new Map(result.map((item, index) => [start + index * DAY_MS, item]));
+  for (const row of rows) {
+    const key = dayStartOf(row.createdAt);
+    const item = bucket.get(key);
+    if (!item) continue;
+    item.total += 1;
+    if (!row.npc) item.players += 1;
+  }
+  return result;
+}
+
+// 在线人数采样序列（直接读 online_samples 表）。
+export function onlineSeries(db, hours = 24) {
+  const since = Date.now() - hours * 60 * 60 * 1000;
+  return db.prepare('SELECT sample_at AS time, online FROM online_samples WHERE sample_at >= ? ORDER BY sample_at')
+    .all(since);
+}
+
+export function recordOnlineSample(db, online, now = Date.now()) {
+  db.prepare('INSERT INTO online_samples (sample_at, online) VALUES (?, ?)').run(now, online);
+  // 只保留 30 天内的采样，避免表无限增长。
+  db.prepare('DELETE FROM online_samples WHERE sample_at < ?').run(now - 30 * DAY_MS);
+}
+
+export function dashboard(db, rooms) {
+  const today = dayStartOf(Date.now());
+  const accounts = db.prepare('SELECT COUNT(*) AS count FROM accounts').get().count;
+  const players = db.prepare('SELECT COUNT(*) AS count FROM accounts WHERE npc = 0').get().count;
+  const totalChips = db.prepare('SELECT COALESCE(SUM(balance), 0) AS sum FROM wallets').get().sum;
+  const opensToday = db.prepare('SELECT COUNT(*) AS count FROM treasure_opens WHERE created_at >= ?').get(today).count;
+  const marketToday = db.prepare(`SELECT COUNT(*) AS count, COALESCE(SUM(price), 0) AS volume
+    FROM avatar_market_listings WHERE status = 'SOLD' AND settled_at >= ?`).get(today);
+  return {
+    accounts, players, totalChips,
+    opensToday,
+    marketDealsToday: marketToday.count,
+    marketVolumeToday: marketToday.volume,
+    activeRooms: rooms.size,
   };
 }

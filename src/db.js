@@ -180,6 +180,21 @@ CREATE TABLE IF NOT EXISTS npc_table_configs (
   enabled INTEGER NOT NULL DEFAULT 1,
   created_at INTEGER NOT NULL
 );
+
+-- 后台可调的游戏设置（key-value）。目前用于宝箱爆率与奖池开关。
+CREATE TABLE IF NOT EXISTS app_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+-- 在线人数采样：每 5 分钟写一条，供后台折线图使用。
+CREATE TABLE IF NOT EXISTS online_samples (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sample_at INTEGER NOT NULL,
+  online INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_online_samples_time ON online_samples(sample_at);
 `;
 
 export function createDb(dbPath) {

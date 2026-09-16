@@ -149,6 +149,9 @@ function compactNumber(value) {
       form.elements.maxBuyIn.disabled = tournament || unlimited;
       form.elements.allowSpectators.disabled = form.elements.practice.checked;
       if (tournament) form.elements.maxBuyIn.value = form.elements.buyIn.value;
+      // 无上限房：起始筹码不再受输入框默认上限 100000 的约束
+      if (unlimited) form.elements.buyIn.removeAttribute("max");
+      else form.elements.buyIn.max = "100000";
     }
     function syncJoinBringIn() {
       const form = get("join-form");

@@ -18,6 +18,7 @@ import * as adminOps from './src/admin.js';
 import { decideBotAction, normalizeDifficulty } from './src/bot.js';
 import * as npc from './src/npc.js';
 import * as npcMarket from './src/npc-market.js';
+import { grantDailySubsidy, nextGrantTime } from './src/daily-grant.js';
 import { createMahjongService } from './src/mahjong-service.js';
 import { createZjhService } from './src/zjh-service.js';
 import './public/social-catalog.js';
@@ -1061,6 +1062,22 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
   // NPC 头像交易行情：开箱 / 上架 / 捡漏购买，独立于氛围桌开关。
   const npcMarketTimer = setInterval(() => npcMarket.npcMarketTick(db), 300000);
   npcMarketTimer.unref();
+  // 全服定时发钱：每天 0:00 与 18:00 发放 10k（幂等，重启补发同一批次不会重复）。
+  let dailyGrantTimer = null;
+  const scheduleDailyGrant = () => {
+    const delay = Math.max(1000, nextGrantTime() - Date.now());
+    dailyGrantTimer = setTimeout(() => {
+      try {
+        const result = grantDailySubsidy(db);
+        console.log(`[daily-grant] ${result.refId}: granted ${result.granted}/${result.total}`);
+      } catch (error) {
+        console.error('[daily-grant] failed:', error);
+      }
+      scheduleDailyGrant();
+    }, delay);
+    dailyGrantTimer.unref();
+  };
+  scheduleDailyGrant();
   function associate(socket, room, player) {
     clearTimeout(player.disconnectTimer);
     if (player.socketId && player.socketId !== socket.id) {
@@ -1489,6 +1506,7 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       zjh.close();
       clearInterval(npcHealTimer);
       clearInterval(npcMarketTimer);
+      clearTimeout(dailyGrantTimer);
       for (const room of rooms.values()) {
         clearTurn(room);
         clearNextHand(room);

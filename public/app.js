@@ -1,3 +1,17 @@
+"use strict";
+
+function compactNumber(value) {
+  const num = Number(value || 0);
+  if (Math.abs(num) >= 1000000) {
+    const m = num / 1000000;
+    return `${m >= 100 ? Math.round(m) : Math.round(m * 10) / 10}M`;
+  }
+  if (Math.abs(num) >= 1000) {
+    const k = num / 1000;
+    return `${k >= 100 ? Math.round(k) : Math.round(k * 10) / 10}K`;
+  }
+  return num.toLocaleString("zh-CN");
+}
 (() => {
   "use strict";
   const $ = (id) => document.getElementById(id);
@@ -374,9 +388,7 @@
         })[c],
     );
   }
-  function money(value) {
-    return Number(value || 0).toLocaleString("zh-CN");
-  }
+  function money(value) { return compactNumber(value); }
   function toast(message, error = false) {
     clearTimeout(toastTimeout);
     $("toast").textContent = message;

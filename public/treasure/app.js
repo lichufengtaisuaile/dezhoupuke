@@ -25,6 +25,10 @@ const elements = {
   skipButton: document.querySelector("#skipButton"),
   balance: document.querySelector("#balanceValue"),
   history: document.querySelector("#openHistory"),
+  galleryGrid: document.querySelector("#galleryGrid"),
+  gallerySeries: document.querySelector("#gallerySeries"),
+  galleryProgress: document.querySelector("#galleryProgress"),
+  showcaseStrip: document.querySelector("#showcaseStrip"),
   inventory: document.querySelector("#inventoryGrid"),
   market: document.querySelector("#marketGrid"),
   marketSummary: document.querySelector("#marketSummary"),
@@ -58,6 +62,8 @@ const topbar = window.createTopbar({
 let phase = "IDLE";
 let inventory = [];
 let listings = [];
+let gallery = [];
+let galleryFilter = "all";
 let sellTarget = null;
 let buyTarget = null;
 let toastTimer = null;
@@ -120,6 +126,7 @@ async function init() {
   renderIdleReel();
   renderPrizeGallery();
   populateSeries();
+  populateGallerySeries();
   bindEvents();
   topbar.setAccount(auth.get());
   renderBalance();
@@ -136,7 +143,16 @@ function bindEvents() {
   document.querySelector("#refreshHistory").addEventListener("click", loadHistory);
   document.querySelector("#refreshInventory").addEventListener("click", loadInventory);
   document.querySelector("#refreshMarket").addEventListener("click", loadMarket);
+  document.querySelector("#refreshGallery")?.addEventListener("click", loadGallery);
   elements.marketSeries.addEventListener("change", renderMarket);
+  elements.gallerySeries?.addEventListener("change", renderGallery);
+  document.querySelectorAll("[data-gallery-filter]").forEach(button =>
+    button.addEventListener("click", () => {
+      galleryFilter = button.dataset.galleryFilter;
+      document.querySelectorAll("[data-gallery-filter]").forEach(entry =>
+        entry.setAttribute("aria-pressed", String(entry === button)));
+      renderGallery();
+    }));
   document.querySelectorAll("[data-close-dialog]").forEach(button =>
     button.addEventListener("click", () => button.closest("dialog")?.close()));
   elements.inventory.addEventListener("click", handleInventoryAction);
@@ -161,6 +177,7 @@ function bindEvents() {
 function switchTab(tab) {
   elements.tabs.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.tab === tab)));
   elements.panels.forEach(panel => { panel.hidden = panel.dataset.panel !== tab; });
+  if (tab === "gallery") loadGallery();
   if (tab === "inventory") loadInventory();
   if (tab === "market") loadMarket();
   icons();
@@ -436,16 +453,87 @@ async function loadInventory() {
     return;
   }
   try {
-    const data = await auth.api("/api/me/avatar-inventory");
+    const [data, showcaseData] = await Promise.all([
+      auth.api("/api/me/avatar-inventory"),
+      auth.api("/api/me/showcase").catch(() => null),
+    ]);
     inventory = data.items || [];
+    showcase = showcaseData?.items ?? [];
     renderInventory();
   } catch (error) {
     elements.inventory.innerHTML = `<p class="treasure-empty">${esc(error?.error || "库存加载失败")}</p>`;
   }
 }
 
+let showcase = [];
+let showcaseEditing = false;
+
+function renderShowcase() {
+  if (!elements.showcaseStrip) return;
+  const account = auth.get();
+  if (!account) { elements.showcaseStrip.hidden = true; return; }
+  const ownedKinds = [...new Set(inventory.map(item => item.avatar.id))];
+  elements.showcaseStrip.hidden = false;
+  const slots = Array.from({ length: 3 }, (_, index) => showcase[index] ?? null);
+  elements.showcaseStrip.innerHTML = `
+    <div class="showcase-head"><strong>收藏展柜</strong><span>挑 3 个头像展示给其他玩家</span>
+      <button type="button" class="showcase-toggle" data-showcase-toggle>${showcaseEditing ? "完成" : "编辑展柜"}</button>
+    </div>
+    <div class="showcase-slots">
+      ${slots.map((avatar, index) => avatar
+        ? `<figure class="showcase-slot is-filled">
+            <img src="${avatar.src}" alt="${esc(avatar.name)}">
+            <figcaption>${esc(avatar.name)}</figcaption>
+            ${showcaseEditing ? `<button type="button" class="showcase-remove" data-showcase-remove="${index}" aria-label="移除">×</button>` : ""}
+          </figure>`
+        : `<figure class="showcase-slot is-empty"><i data-lucide="image-plus"></i><figcaption>空位</figcaption></figure>`).join("")}
+    </div>
+    ${showcaseEditing
+      ? `<div class="showcase-pick">
+          <p>${ownedKinds.length ? "点击加入展柜：" : "先获得宝箱头像，再回来布置展柜"}</p>
+          <div class="showcase-pick-row">
+            ${ownedKinds
+              .filter(avatarId => !showcase.some(item => item.id === avatarId) && showcase.length < 3)
+              .map(avatarId => {
+                const item = catalog.find(entry => entry.id === avatarId);
+                return item ? `<button type="button" class="showcase-pick-button" data-showcase-add="${esc(avatarId)}"><img src="${item.src}" alt="${esc(item.name)}"><span>${esc(item.name)}</span></button>` : "";
+              }).join("")}
+          </div>
+        </div>`
+      : ""}`;
+  elements.showcaseStrip.querySelector("[data-showcase-toggle]")?.addEventListener("click", async () => {
+    if (showcaseEditing) {
+      showcaseEditing = false;
+      try {
+        await auth.api("/api/me/showcase", { method: "POST", body: JSON.stringify({ avatarIds: showcase.map(item => item.id) }) });
+        showToast("展柜已保存");
+      } catch (error) {
+        showToast(error?.error || "展柜保存失败", true);
+      }
+    } else {
+      showcaseEditing = true;
+    }
+    renderShowcase();
+  });
+  elements.showcaseStrip.querySelectorAll("[data-showcase-add]").forEach(button =>
+    button.addEventListener("click", () => {
+      if (showcase.length >= 3) return;
+      const item = catalog.find(entry => entry.id === button.dataset.showcaseAdd);
+      if (!item) return;
+      showcase = [...showcase, item];
+      renderShowcase();
+    }));
+  elements.showcaseStrip.querySelectorAll("[data-showcase-remove]").forEach(button =>
+    button.addEventListener("click", () => {
+      showcase = showcase.filter((_, index) => index !== Number(button.dataset.showcaseRemove));
+      renderShowcase();
+    }));
+  icons();
+}
+
 function renderInventory() {
   const account = auth.get();
+  renderShowcase();
   elements.inventoryCount.hidden = !inventory.length;
   elements.inventoryCount.textContent = inventory.length;
   if (!account) {
@@ -519,7 +607,7 @@ function openSellDialog(itemId) {
 
 function renderSellerReceives() {
   const price = Math.max(0, Math.trunc(Number(elements.sellPrice.value) || 0));
-  elements.sellerReceives.textContent = `预计到账 ${money(price - Math.floor(price * 0.1))}`;
+  elements.sellerReceives.textContent = `上架费 ${money(Math.max(1, Math.floor(price * 0.01)))} · 成交后到账 ${money(price - Math.floor(price * 0.09))}`;
 }
 
 async function submitListing(event) {
@@ -562,23 +650,83 @@ function populateSeries() {
   elements.marketSeries.insertAdjacentHTML("beforeend", series.map(value => `<option value="${esc(value)}">${esc(value)}</option>`).join(""));
 }
 
+function populateGallerySeries() {
+  if (!elements.gallerySeries) return;
+  const series = [...new Set(catalog.map(item => item.series))];
+  elements.gallerySeries.insertAdjacentHTML("beforeend", series.map(value => `<option value="${esc(value)}">${esc(value)}</option>`).join(""));
+}
+
+async function loadGallery() {
+  if (!elements.galleryGrid) return;
+  if (!auth.get()) {
+    gallery = [];
+    renderGallery();
+    return;
+  }
+  try {
+    const data = await auth.api("/api/me/avatar-gallery");
+    gallery = data.entries || [];
+    renderGallery();
+  } catch (error) {
+    elements.galleryGrid.innerHTML = `<p class="treasure-empty">${esc(error?.error || "图鉴加载失败")}</p>`;
+  }
+}
+
+function renderGallery() {
+  if (!elements.galleryGrid) return;
+  const owned = gallery.filter(entry => entry.owned).length;
+  if (!auth.get()) {
+    elements.galleryProgress.innerHTML = '<p class="treasure-empty">登录后点亮你的头像图鉴</p>';
+    elements.galleryGrid.innerHTML = "";
+    return;
+  }
+  elements.galleryProgress.innerHTML = `
+    <div class="gallery-progress-bar"><span style="width:${gallery.length ? Math.round(owned / gallery.length * 100) : 0}%"></span></div>
+    <p>已点亮 <strong>${owned}</strong> / ${gallery.length} 款头像</p>`;
+  const selectedSeries = elements.gallerySeries?.value ?? "";
+  const visible = gallery.filter(entry =>
+    (!selectedSeries || entry.avatar.series === selectedSeries)
+    && (galleryFilter === "all" || (galleryFilter === "owned") === entry.owned));
+  if (!visible.length) {
+    elements.galleryGrid.innerHTML = '<p class="treasure-empty">这个筛选条件下还没有头像</p>';
+    return;
+  }
+  elements.galleryGrid.innerHTML = visible.map(entry => `
+    <article class="gallery-card${entry.owned ? "" : " is-missing"}">
+      <div class="gallery-card-image">
+        <img src="${entry.avatar.src}" alt="${esc(entry.avatar.name)}" draggable="false" ${entry.owned ? "" : 'class="is-silhouette"'}>
+        ${entry.owned && entry.count > 1 ? `<span class="item-state is-equipped">×${entry.count}</span>` : ""}
+      </div>
+      <div class="gallery-card-body">
+        <h2>${entry.owned ? esc(entry.avatar.name) : "？？？"}</h2>
+        <span class="item-series">${esc(entry.avatar.series)}</span>
+        <dl class="gallery-market">
+          <div><dt>市场参考价</dt><dd>${entry.referencePrice ? money(entry.referencePrice) : "暂无成交"}</dd></div>
+          <div><dt>在售</dt><dd>${entry.activeListings ? `${entry.activeListings} 件 · 最低 ${money(entry.lowestPrice)}` : "无"}</dd></div>
+        </dl>
+      </div>
+    </article>`).join("");
+}
+
 function renderMarket() {
   const selectedSeries = elements.marketSeries.value;
   const visible = listings.filter(listing => !selectedSeries || listing.avatar.series === selectedSeries);
   elements.listingCount.hidden = !listings.length;
   elements.listingCount.textContent = listings.length;
-  elements.marketSummary.innerHTML = `<span>在售头像<strong>${visible.length}</strong></span><span>最低价格<strong>${visible.length ? money(Math.min(...visible.map(item => item.price))) : "—"}</strong></span><span>成交手续费<strong>10%</strong></span>`;
+  elements.marketSummary.innerHTML = `<span>在售头像<strong>${visible.length}</strong></span><span>最低价格<strong>${visible.length ? money(Math.min(...visible.map(item => item.price))) : "—"}</strong></span><span>成交手续费<strong>9%</strong></span>`;
   if (!visible.length) {
     elements.market.innerHTML = '<p class="treasure-empty">当前分类还没有玩家出售头像</p>';
     return;
   }
   elements.market.innerHTML = visible.map(listing => {
     const own = auth.get()?.accountId === listing.seller.id;
+    const overpriced = listing.referencePrice && listing.price > listing.referencePrice * 2;
     return `<article class="market-card">
       <div class="market-card-image"><img src="${listing.avatar.src}" alt="${esc(listing.avatar.name)}" draggable="false"></div>
       <div class="market-card-body"><h2>${esc(listing.avatar.name)}</h2><span class="item-series">${esc(listing.avatar.series)}</span>
         <div class="market-card-price"><strong>${money(listing.price)}</strong><span>筹码</span></div>
         <p class="market-seller">卖家：${esc(listing.seller.name)}</p>
+        ${listing.referencePrice ? `<p class="market-ref">7 天参考价 ${money(listing.referencePrice)}${overpriced ? '<em class="market-overpriced">高于参考价 2 倍以上</em>' : ""}</p>` : ""}
         <button type="button" class="market-buy" data-buy="${listing.id}" ${own ? "disabled" : ""}>${own ? "我的商品" : "购买头像"}</button>
       </div>
     </article>`;
@@ -591,6 +739,11 @@ async function handleMarketAction(event) {
   buyTarget = listings.find(listing => listing.id === button.dataset.buy) ?? null;
   if (!buyTarget) return;
   elements.buyItem.innerHTML = itemMarkup(buyTarget.avatar, `卖家 ${buyTarget.seller.name} · ${money(buyTarget.price)} 筹码`);
+  const warning = elements.buyDialog.querySelector(".buy-warning");
+  const overpriced = buyTarget.referencePrice && buyTarget.price > buyTarget.referencePrice * 2;
+  warning.textContent = overpriced
+    ? `注意：该价格超过近 7 天参考价（${money(buyTarget.referencePrice)}）的 2 倍，请确认后再购买。购买后头像立即进入库存，交易无法撤销。`
+    : "购买后头像立即进入库存，交易无法撤销。";
   elements.buyError.hidden = true;
   elements.confirmBuy.textContent = `支付 ${money(buyTarget.price)} 筹码`;
   elements.buyDialog.showModal();

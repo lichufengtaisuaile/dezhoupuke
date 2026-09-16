@@ -1,4 +1,5 @@
 import { balanceOf } from './wallet.js';
+import { collectionCount, collectionTitle, showcase } from './treasure.js';
 
 const PAGE_SIZE = 20;
 
@@ -39,21 +40,55 @@ export function tableAssets(db, rooms) {
 
 function assetsList(db, rooms) {
   const stacks = tableAssets(db, rooms);
-  const rows = db.prepare(`SELECT w.account_id AS id, a.name, w.balance
+  const rows = db.prepare(`SELECT w.account_id AS id, a.name, w.balance, a.avatar
                            FROM wallets w JOIN accounts a ON a.id = w.account_id`).all();
   return rows
-    .map(row => ({ id: row.id, name: row.name, total: row.balance + (stacks.get(row.id) ?? 0) }))
+    .map(row => ({
+      id: row.id,
+      name: row.name,
+      total: row.balance + (stacks.get(row.id) ?? 0),
+      avatar: row.avatar,
+      collection: collectionCount(db, row.id),
+      collectionTitle: collectionTitle(collectionCount(db, row.id)),
+      showcase: showcase(db, row.id).items,
+    }))
     .sort((a, b) => b.total - a.total);
 }
 
 export function leaderboard(db, rooms, limit = 50) {
-  return assetsList(db, rooms).slice(0, limit).map(({ name, total }) => ({ name, total }));
+  return assetsList(db, rooms).slice(0, limit).map(({ name, total, avatar, collection, collectionTitle: title, showcase: caseItems }) => ({
+    name, total, avatar, collection, collectionTitle: title, showcase: caseItems,
+  }));
+}
+
+// 收藏榜：按已收集的不同头像种类排序，同数按收集件数、再按完成时间。
+export function collectionLeaderboard(db, limit = 50) {
+  const rows = db.prepare(`SELECT a.id, a.name, a.avatar,
+      COUNT(DISTINCT i.avatar_id) AS kinds,
+      COUNT(i.id) AS copies,
+      MAX(i.acquired_at) AS lastAcquired
+    FROM accounts a
+    JOIN avatar_items i ON i.owner_account_id = a.id
+    WHERE a.npc = 0
+    GROUP BY a.id`).all();
+  return rows
+    .map(row => ({
+      name: row.name,
+      avatar: row.avatar,
+      collection: row.kinds,
+      copies: row.copies,
+      collectionTitle: collectionTitle(row.kinds),
+      showcase: showcase(db, row.id).items,
+    }))
+    .sort((a, b) => b.collection - a.collection || b.copies - a.copies || String(a.name).localeCompare(String(b.name), 'zh-CN'))
+    .slice(0, limit);
 }
 
 export function overview(db, rooms, accountId) {
   const assets = assetsList(db, rooms);
   const mine = assets.find(entry => entry.id === accountId);
   const totalAssets = mine ? mine.total : balanceOf(db, accountId);
+  const collection = collectionCount(db, accountId);
   const tableStack = Math.max(0, totalAssets - balanceOf(db, accountId));
   const aggregate = db.prepare(`SELECT COUNT(*) AS hands,
       COALESCE(SUM(net), 0) AS net,
@@ -73,6 +108,9 @@ export function overview(db, rooms, accountId) {
     balance: balanceOf(db, accountId),
     tableStack,
     totalAssets,
+    collection,
+    collectionTitle: collectionTitle(collection),
+    showcase: showcase(db, accountId).items,
     rank: mine ? 1 + assets.filter(entry => entry.total > mine.total).length : null,
     totalPlayers: assets.length,
     handsPlayed: aggregate.hands,

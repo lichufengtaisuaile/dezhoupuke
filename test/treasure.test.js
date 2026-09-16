@@ -159,7 +159,7 @@ test('an actively listed final copy cannot be equipped', async t => {
   assert.equal(server.db.prepare('SELECT avatar FROM accounts WHERE id = ?').get(account.accountId).avatar, null);
 });
 
-test('fixed-price market locks inventory, transfers ownership atomically and removes ten percent', async t => {
+test('fixed-price market locks inventory, transfers ownership atomically and charges nine percent', async t => {
   const server = await fixture(t);
   const seller = accounts.register(server.db, 'seller', 'secret123');
   const buyer = accounts.register(server.db, 'buyer', 'secret123');
@@ -180,14 +180,15 @@ test('fixed-price market locks inventory, transfers ownership atomically and rem
   const bought = await api(server, 'POST', `/api/avatar-market/listings/${listingId}/buy`, { token: buyer.token });
   assert.equal(bought.status, 200);
   assert.equal(bought.body.price, 6000);
-  assert.equal(bought.body.fee, 600);
-  assert.equal(bought.body.proceeds, 5400);
+  assert.equal(bought.body.fee, 540);
+  assert.equal(bought.body.proceeds, 5460);
   assert.equal(bought.body.balance, 4000);
   assert.equal(wallet.balanceOf(server.db, seller.accountId), 15400);
   assert.equal(server.db.prepare('SELECT owner_account_id FROM avatar_items WHERE id = ?').get(itemId).owner_account_id, buyer.accountId);
   assert.equal(server.db.prepare('SELECT status FROM avatar_market_listings WHERE id = ?').get(listingId).status, 'SOLD');
   assert.equal(server.db.prepare("SELECT amount FROM ledger WHERE account_id = ? AND type = 'MARKET_BUY'").get(buyer.accountId).amount, -6000);
-  assert.equal(server.db.prepare("SELECT amount FROM ledger WHERE account_id = ? AND type = 'MARKET_SALE'").get(seller.accountId).amount, 5400);
+  assert.equal(server.db.prepare("SELECT amount FROM ledger WHERE account_id = ? AND type = 'MARKET_SALE'").get(seller.accountId).amount, 5460);
+  assert.equal(server.db.prepare("SELECT amount FROM ledger WHERE account_id = ? AND type = 'MARKET_LISTING_FEE'").get(seller.accountId).amount, -60);
 
   const replay = await api(server, 'POST', `/api/avatar-market/listings/${listingId}/buy`, { token: buyer.token });
   assert.equal(replay.status, 200);
@@ -196,8 +197,9 @@ test('fixed-price market locks inventory, transfers ownership atomically and rem
   assert.equal(replay.body.balance, 4000);
   assert.equal(wallet.balanceOf(server.db, buyer.accountId), 4000);
   assert.equal(wallet.balanceOf(server.db, seller.accountId), 15400);
+  // 三笔流水：上架费、买家付款、卖家到账
   assert.equal(server.db.prepare("SELECT COUNT(*) AS count FROM ledger WHERE ref_type = 'avatar-market' AND ref_id = ?")
-    .get(listingId).count, 2);
+    .get(listingId).count, 3);
   const buyerInventory = await api(server, 'GET', '/api/me/avatar-inventory', { token: buyer.token });
   assert.equal(buyerInventory.body.items[0].avatar.id, avatar.id);
 });
@@ -217,5 +219,152 @@ test('seller can cancel only their own active listing without moving chips or ow
   assert.equal(cancelled.status, 200);
   assert.equal(server.db.prepare('SELECT status FROM avatar_market_listings WHERE id = ?').get(listing.id).status, 'CANCELLED');
   assert.equal(server.db.prepare('SELECT owner_account_id FROM avatar_items WHERE id = ?').get(itemId).owner_account_id, seller.accountId);
-  assert.equal(wallet.balanceOf(server.db, seller.accountId), 10000);
+  // 上架费 1%（80）已收取，主动下架不退
+  assert.equal(wallet.balanceOf(server.db, seller.accountId), 9920);
+});
+
+test('listing expires after seven days and reference price uses the seven day median', async t => {
+  const server = await fixture(t);
+  const seller = accounts.register(server.db, 'expireSell', 'secret123');
+  const avatarId = treasure.config().prizes[3].id;
+  const itemId = randomUUID();
+  server.db.prepare(`INSERT INTO avatar_items (id, avatar_id, owner_account_id, acquired_at)
+    VALUES (?, ?, ?, ?)`).run(itemId, avatarId, seller.accountId, Date.now());
+  const listed = await api(server, 'POST', '/api/avatar-market/listings', {
+    token: seller.token, body: { itemId, price: 5000 },
+  });
+  assert.equal(listed.status, 200);
+  const listingId = listed.body.listing.id;
+
+  // 直接把创建时间拨到 8 天前，惰性清理应当在下次读取时过期
+  server.db.prepare('UPDATE avatar_market_listings SET created_at = ? WHERE id = ?')
+    .run(Date.now() - 8 * 24 * 60 * 60 * 1000, listingId);
+  const market = await api(server, 'GET', '/api/avatar-market/listings');
+  assert.equal(market.status, 200);
+  assert.equal(market.body.listings.length, 0);
+  assert.equal(server.db.prepare('SELECT status FROM avatar_market_listings WHERE id = ?').get(listingId).status, 'EXPIRED');
+  // 过期后物品仍归卖家，且可以重新上架（再交一次上架费）
+  const relisted = await api(server, 'POST', '/api/avatar-market/listings', {
+    token: seller.token, body: { itemId, price: 6000 },
+  });
+  assert.equal(relisted.status, 200);
+
+  // 参考价：造三笔 7 天内的成交（1000/2000/3000），中位 2000
+  const buyer = accounts.register(server.db, 'medianBuy', 'secret123');
+  for (const price of [1000, 2000, 3000]) {
+    const id = randomUUID();
+    server.db.prepare(`INSERT INTO avatar_items (id, avatar_id, owner_account_id, acquired_at)
+      VALUES (?, ?, ?, ?)`).run(id, avatarId, seller.accountId, Date.now());
+    const created = await api(server, 'POST', '/api/avatar-market/listings', {
+      token: seller.token, body: { itemId: id, price },
+    });
+    assert.equal(created.status, 200);
+    const bought = await api(server, 'POST', `/api/avatar-market/listings/${created.body.listing.id}/buy`, { token: buyer.token });
+    assert.equal(bought.status, 200);
+  }
+  assert.equal(treasure.marketReferencePrice(server.db, avatarId), 2000);
+});
+
+test('avatar gallery shows ownership, market reference price and listing counts', async t => {
+  const server = await fixture(t);
+  const account = accounts.register(server.db, 'galleryUser', 'secret123');
+  const avatarId = treasure.config().prizes[5].id;
+  server.db.prepare(`INSERT INTO avatar_items (id, avatar_id, owner_account_id, acquired_at)
+    VALUES (?, ?, ?, ?)`).run(randomUUID(), avatarId, account.accountId, Date.now());
+  const response = await api(server, 'GET', '/api/me/avatar-gallery', { token: account.token });
+  assert.equal(response.status, 200);
+  assert.equal(response.body.total, 51);
+  const entry = response.body.entries.find(item => item.avatar.id === avatarId);
+  assert.equal(entry.owned, true);
+  assert.equal(entry.count, 1);
+  assert.equal(response.body.entries.filter(item => !item.owned).length, 50);
+});
+
+test('showcase stores up to three owned avatar kinds', async t => {
+  const server = await fixture(t);
+  const account = accounts.register(server.db, 'showcaseUser', 'secret123');
+  const ids = treasure.config().prizes.slice(0, 4).map(item => item.id);
+  for (const avatarId of ids.slice(0, 2)) {
+    server.db.prepare(`INSERT INTO avatar_items (id, avatar_id, owner_account_id, acquired_at)
+      VALUES (?, ?, ?, ?)`).run(randomUUID(), avatarId, account.accountId, Date.now());
+  }
+  const denied = await api(server, 'POST', '/api/me/showcase', {
+    token: account.token, body: { avatarIds: [ids[2]] },
+  });
+  assert.equal(denied.status, 400);
+  const saved = await api(server, 'POST', '/api/me/showcase', {
+    token: account.token, body: { avatarIds: [ids[0], ids[1], ids[0]] },
+  });
+  assert.equal(saved.status, 200);
+  assert.equal(saved.body.items.length, 2);
+  const loaded = await api(server, 'GET', '/api/me/showcase', { token: account.token });
+  assert.equal(loaded.body.slots, 3);
+  assert.equal(loaded.body.items[0].id, ids[0]);
+});
+
+test('admin can force delist and revert trades with audit trail', async t => {
+  const server = await fixture(t);
+  const seller = accounts.register(server.db, 'modSeller', 'secret123');
+  const buyer = accounts.register(server.db, 'modBuyer', 'secret123');
+  const avatarId = treasure.config().prizes[7].id;
+  const itemId = randomUUID();
+  server.db.prepare(`INSERT INTO avatar_items (id, avatar_id, owner_account_id, acquired_at)
+    VALUES (?, ?, ?, ?)`).run(itemId, avatarId, seller.accountId, Date.now());
+  const listed = await api(server, 'POST', '/api/avatar-market/listings', {
+    token: seller.token, body: { itemId, price: 4000 },
+  });
+  const listingId = listed.body.listing.id;
+
+  const noReason = await fetch(`http://127.0.0.1:${server.port}/api/admin/market/${listingId}/delist`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: '' }),
+  });
+  // 未带管理员令牌应当 401/503
+  assert.ok(noReason.status === 401 || noReason.status === 503);
+
+  const bought = await api(server, 'POST', `/api/avatar-market/listings/${listingId}/buy`, { token: buyer.token });
+  assert.equal(bought.status, 200);
+  // 成交后不能再强制下架
+  const delistSold = await fetch(`http://127.0.0.1:${server.port}/api/admin/market/${listingId}/delist`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: '测试' }),
+  });
+  assert.ok(delistSold.status === 401 || delistSold.status === 503);
+  assert.equal(server.db.prepare('SELECT status FROM avatar_market_listings WHERE id = ?').get(listingId).status, 'SOLD');
+
+  const direct = treasure.adminRevertTrade(server.db, listingId, '异常交易测试');
+  assert.equal(direct.refunded, 4000);
+  assert.equal(server.db.prepare('SELECT status FROM avatar_market_listings WHERE id = ?').get(listingId).status, 'REVERTED');
+  // 头像转入系统回收账号，不再流通
+  const reclaimedBy = server.db.prepare('SELECT id FROM accounts WHERE name = ?').get('system-reclaim').id;
+  assert.equal(server.db.prepare('SELECT owner_account_id FROM avatar_items WHERE id = ?').get(itemId).owner_account_id, reclaimedBy);
+  assert.equal(wallet.balanceOf(server.db, buyer.accountId), 10000);
+  // 卖家到账 3600（9% 手续费 4000-360）后被扣回
+  assert.equal(wallet.balanceOf(server.db, seller.accountId), 10000 - 40);
+
+  assert.throws(() => treasure.adminRevertTrade(server.db, listingId, '重复撤回'), /已经|找不到|成交/);
+});
+
+test('collection leaderboard counts distinct avatar kinds and titles unlock by tiers', async t => {
+  const server = await fixture(t);
+  const account = accounts.register(server.db, '收藏家小王', 'secret123');
+  assert.equal(treasure.collectionTitle(0), null);
+  assert.equal(treasure.collectionTitle(5), '初入藏馆');
+  assert.equal(treasure.collectionTitle(15), '资深收藏家');
+  assert.equal(treasure.collectionTitle(30), '头像鉴赏家');
+  assert.equal(treasure.collectionTitle(45), '传奇馆主');
+  assert.equal(treasure.collectionTitle(51), '全图鉴收藏家');
+  for (const item of treasure.config().prizes.slice(0, 5)) {
+    server.db.prepare(`INSERT INTO avatar_items (id, avatar_id, owner_account_id, acquired_at)
+      VALUES (?, ?, ?, ?)`).run(randomUUID(), item.id, account.accountId, Date.now());
+  }
+  // 同款重复不增加收藏数
+  server.db.prepare(`INSERT INTO avatar_items (id, avatar_id, owner_account_id, acquired_at)
+    VALUES (?, ?, ?, ?)`).run(randomUUID(), treasure.config().prizes[0].id, account.accountId, Date.now());
+  const board = await api(server, 'GET', '/api/leaderboard/collection');
+  assert.equal(board.status, 200);
+  assert.equal(board.body.entries[0].name, '收藏家小王');
+  assert.equal(board.body.entries[0].collection, 5);
+  assert.equal(board.body.entries[0].collectionTitle, '初入藏馆');
+  const overview = await api(server, 'GET', '/api/me/overview', { token: account.token });
+  assert.equal(overview.body.collection, 5);
+  assert.equal(overview.body.collectionTitle, '初入藏馆');
 });

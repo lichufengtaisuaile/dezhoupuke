@@ -30,7 +30,19 @@
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   })[c]);
-  const money = (value) => Number(value || 0).toLocaleString("zh-CN");
+  // 大数字缩写：≥1,000,000 显示为 1M / 2.5M，≥1,000 显示为 1K / 12.5K
+  const money = (value) => {
+    const num = Number(value || 0);
+    if (Math.abs(num) >= 1000000) {
+      const m = num / 1000000;
+      return `${m >= 100 ? Math.round(m) : Math.round(m * 10) / 10}M`;
+    }
+    if (Math.abs(num) >= 1000) {
+      const k = num / 1000;
+      return `${k >= 100 ? Math.round(k) : Math.round(k * 10) / 10}K`;
+    }
+    return num.toLocaleString("zh-CN");
+  };
   const signedMoney = (value) => `${Number(value) > 0 ? "+" : "−"}${money(Math.abs(Number(value) || 0))}`;
   const icons = () => window.lucide?.createIcons();
   const fmtTime = (value) => {
@@ -550,6 +562,9 @@
     const rank = data.rank ? `#${data.rank}${data.totalPlayers ? ` / ${data.totalPlayers}` : ""}` : "—";
     const net = Number(data.netProfit || 0);
     const winRate = `${Math.round((data.winRate || 0) * 1000) / 10}%`;
+    const collection = Number(data.collection || 0);
+    const collectionTitle = data.collectionTitle ? `<em class="profile-collection-title">${esc(data.collectionTitle)}</em>` : "";
+    const showcase = Array.isArray(data.showcase) ? data.showcase : [];
     const rows = (boardEntries || []).slice(0, 10);
     const selfIndex = boardEntries.findIndex((entry) => entry.name === account?.name);
     const selfBeyond = Boolean(account) && selfIndex >= 10;
@@ -558,6 +573,9 @@
       rank: selfIndex >= 0 ? selfIndex + 1 : (data.rank || null),
       name: selfIndex >= 0 ? boardEntries[selfIndex].name : account.name,
       total: selfIndex >= 0 ? boardEntries[selfIndex].total : data.totalAssets,
+      avatar: selfIndex >= 0 ? boardEntries[selfIndex].avatar : (account.avatar ?? null),
+      collection: selfIndex >= 0 ? boardEntries[selfIndex].collection : collection,
+      collectionTitle: selfIndex >= 0 ? boardEntries[selfIndex].collectionTitle : data.collectionTitle,
     } : null;
     panel.innerHTML = `
       <div class="profile-stats">
@@ -572,7 +590,9 @@
         <div><span>麻将净盈亏</span><strong class="${Number(data.mahjongNet || 0) > 0 ? "pos" : Number(data.mahjongNet || 0) < 0 ? "neg" : ""}">${Number(data.mahjongNet || 0) === 0 ? "0" : signedMoney(data.mahjongNet)}</strong></div>
         <div><span>炸金花局数 / 获胜次数</span><strong>${money(data.zjhRounds)} / ${money(data.zjhWins)}</strong></div>
         <div><span>炸金花净盈亏</span><strong class="${Number(data.zjhNet || 0) > 0 ? "pos" : Number(data.zjhNet || 0) < 0 ? "neg" : ""}">${Number(data.zjhNet || 0) === 0 ? "0" : signedMoney(data.zjhNet)}</strong></div>
+        <div><span>头像收藏</span><strong>${money(collection)} / 51 ${collectionTitle}</strong></div>
       </div>
+      ${showcase.length ? `<div class="profile-showcase">${showcase.map(item => `<img src="${esc(item.src)}" width="56" height="56" alt="${esc(item.name)}" title="${esc(item.name)}">`).join("")}</div>` : ""}
       ${Number(data.totalAssets) < SUBSIDY_THRESHOLD
         ? `<button type="button" class="button secondary full profile-subsidy" data-profile-subsidy><i data-lucide="gift"></i>领取每日补助 2,000 筹码</button>`
         : ""}
@@ -580,14 +600,18 @@
       ${rows.length ? `<ol class="profile-board">${rows.map((entry, index) => `
         <li class="${index < 3 ? `rank-${index + 1}` : ""} ${entry.name === account?.name ? "is-self" : ""}">
           <span class="profile-board-rank">${index + 1}</span>
-          <span class="profile-board-name">${esc(entry.name)}${entry.name === account?.name ? "<b>（你）</b>" : ""}</span>
+          <img class="profile-board-avatar" src="${avatarSource(entry.name, entry.avatar ?? null)}" width="30" height="30" alt="" draggable="false">
+          <span class="profile-board-name">${esc(entry.name)}${entry.name === account?.name ? "<b>（你）</b>" : ""}${entry.collectionTitle ? `<i class="profile-board-title">${esc(entry.collectionTitle)}</i>` : ""}</span>
+          <span class="profile-board-collection">藏 ${money(entry.collection ?? 0)}</span>
           <strong>${money(entry.total)}</strong>
         </li>`).join("")}
         ${selfRow ? `
         <li class="profile-board-gap" aria-hidden="true"><span>…</span></li>
         <li class="is-self">
           <span class="profile-board-rank">${selfRow.rank ?? "—"}</span>
-          <span class="profile-board-name">${esc(selfRow.name)}<b>（你）</b></span>
+          <img class="profile-board-avatar" src="${avatarSource(selfRow.name, selfRow.avatar ?? null)}" width="30" height="30" alt="" draggable="false">
+          <span class="profile-board-name">${esc(selfRow.name)}<b>（你）</b>${selfRow.collectionTitle ? `<i class="profile-board-title">${esc(selfRow.collectionTitle)}</i>` : ""}</span>
+          <span class="profile-board-collection">藏 ${money(selfRow.collection ?? 0)}</span>
           <strong>${money(selfRow.total)}</strong>
         </li>` : ""}
       </ol>`

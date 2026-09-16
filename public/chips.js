@@ -1,3 +1,17 @@
+"use strict";
+
+function compactNumber(value) {
+  const num = Number(value || 0);
+  if (Math.abs(num) >= 1000000) {
+    const m = num / 1000000;
+    return `${m >= 100 ? Math.round(m) : Math.round(m * 10) / 10}M`;
+  }
+  if (Math.abs(num) >= 1000) {
+    const k = num / 1000;
+    return `${k >= 100 ? Math.round(k) : Math.round(k * 10) / 10}K`;
+  }
+  return num.toLocaleString("zh-CN");
+}
 (() => {
   "use strict";
   const denominations = [
@@ -7,7 +21,7 @@
     { value: 5, color: "ruby" },
     { value: 1, color: "ivory" },
   ];
-  const format = value => Math.round(value).toLocaleString("zh-CN");
+  const format = compactNumber;
 
   function chipTypes(amount) {
     let rest = Math.max(0, Math.floor(amount));

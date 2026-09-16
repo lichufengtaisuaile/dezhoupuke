@@ -189,6 +189,7 @@ export function createDb(dbPath) {
   db.exec(SCHEMA);
   migrateAccounts(db);
   migrateLedger(db);
+  migrateMarketListings(db);
   seedNpcTableConfigs(db);
   return db;
 }
@@ -221,12 +222,58 @@ function migrateAccounts(db) {
   if (!columns.includes('avatar')) {
     db.exec('ALTER TABLE accounts ADD COLUMN avatar TEXT');
   }
+  if (!columns.includes('showcase')) {
+    db.exec('ALTER TABLE accounts ADD COLUMN showcase TEXT');
+  }
+}
+
+// avatar_market_listings 的状态集合需要随规则演进（7 天未成交自动过期 EXPIRED、
+// 管理员撤回成交 REVERTED）。老库 CHECK 不含新状态时按
+// "建新表 → 按列名拷贝 → 删旧表 → 改名"重建，数据无损。
+const LISTING_STATUSES = ['ACTIVE', 'SOLD', 'CANCELLED', 'EXPIRED', 'REVERTED'];
+
+function migrateMarketListings(db) {
+  const table = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'avatar_market_listings'").get();
+  if (!table || LISTING_STATUSES.every((status) => table.sql.includes(`'${status}'`))) return;
+  const foreignKeys = db.pragma('foreign_keys', { simple: true });
+  db.pragma('foreign_keys = OFF');
+  try {
+    db.transaction(() => {
+      db.exec(`
+        CREATE TABLE avatar_market_listings_next (
+          id TEXT PRIMARY KEY,
+          item_id TEXT NOT NULL REFERENCES avatar_items(id),
+          seller_account_id TEXT NOT NULL REFERENCES accounts(id),
+          buyer_account_id TEXT REFERENCES accounts(id),
+          price INTEGER NOT NULL,
+          fee INTEGER NOT NULL DEFAULT 0,
+          status TEXT NOT NULL CHECK (status IN (${LISTING_STATUSES.map((status) => `'${status}'`).join(', ')})),
+          created_at INTEGER NOT NULL,
+          settled_at INTEGER
+        );
+        INSERT INTO avatar_market_listings_next (id, item_id, seller_account_id, buyer_account_id, price, fee, status, created_at, settled_at)
+          SELECT id, item_id, seller_account_id, buyer_account_id, price, fee, status, created_at, settled_at FROM avatar_market_listings;
+        DROP TABLE avatar_market_listings;
+        ALTER TABLE avatar_market_listings_next RENAME TO avatar_market_listings;
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_avatar_market_active_item
+          ON avatar_market_listings(item_id) WHERE status = 'ACTIVE';
+        CREATE INDEX IF NOT EXISTS idx_avatar_market_active_price
+          ON avatar_market_listings(status, price, created_at);
+        CREATE INDEX IF NOT EXISTS idx_avatar_market_seller
+          ON avatar_market_listings(seller_account_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_avatar_market_buyer
+          ON avatar_market_listings(buyer_account_id, settled_at DESC);
+      `);
+    })();
+  } finally {
+    db.pragma(`foreign_keys = ${foreignKeys ? 'ON' : 'OFF'}`);
+  }
 }
 
 // SQLite 不能修改 CHECK 约束：凡是 ledger.type 的 CHECK 不含最新类型集合的库
 // （最早六种、加老虎机后的八种）都按"建新表 → 按列名拷贝 → 删旧表 → 改名"重建，数据无损。
 // 注意：ledger 各历史版本的列集相同，按列名拷贝即可；外键约束临时关闭。
-const LEDGER_TYPES = ['REGISTER_GRANT', 'SUBSIDY', 'BRING_IN', 'CASH_OUT', 'HAND_WIN', 'PRACTICE', 'SLOT_BET', 'SLOT_WIN', 'ADMIN_ADJUST', 'MAHJONG_SETTLE', 'ZJH_SETTLE', 'TREASURE_OPEN', 'MARKET_BUY', 'MARKET_SALE'];
+const LEDGER_TYPES = ['REGISTER_GRANT', 'SUBSIDY', 'BRING_IN', 'CASH_OUT', 'HAND_WIN', 'PRACTICE', 'SLOT_BET', 'SLOT_WIN', 'ADMIN_ADJUST', 'MAHJONG_SETTLE', 'ZJH_SETTLE', 'TREASURE_OPEN', 'MARKET_BUY', 'MARKET_SALE', 'MARKET_LISTING_FEE', 'MARKET_REVERT'];
 
 function migrateLedger(db) {
   const table = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'ledger'").get();

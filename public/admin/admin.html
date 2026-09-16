@@ -143,6 +143,45 @@
 
         <section class="admin-audit">
           <div class="admin-audit-head">
+            <h2>交易行监管</h2>
+            <span class="admin-count" id="marketCount"></span>
+          </div>
+          <div class="admin-toolbar">
+            <input id="marketSearch" type="search" placeholder="按卖家/买家/头像搜索…" aria-label="搜索交易订单" />
+            <label class="admin-sort-label" for="marketStatus">状态
+              <select id="marketStatus">
+                <option value="">全部</option>
+                <option value="ACTIVE">在售</option>
+                <option value="SOLD">已成交</option>
+                <option value="CANCELLED">已下架</option>
+                <option value="EXPIRED">已过期</option>
+                <option value="REVERTED">已撤回</option>
+              </select>
+            </label>
+            <button type="button" class="button secondary" id="marketRefresh">刷新</button>
+          </div>
+          <div class="admin-table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>头像</th>
+                  <th>价格</th>
+                  <th>卖家</th>
+                  <th>买家</th>
+                  <th>状态</th>
+                  <th>时间</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="marketBody"></tbody>
+            </table>
+            <p class="admin-empty" id="marketEmpty" hidden>没有匹配的交易订单</p>
+          </div>
+          <div class="admin-pager" id="marketPager" hidden></div>
+        </section>
+
+        <section class="admin-audit">
+          <div class="admin-audit-head">
             <h2>审计日志</h2>
             <span class="admin-count" id="auditCount"></span>
           </div>
@@ -194,6 +233,23 @@
     </dialog>
 
     <div class="toast" id="toast" role="status" hidden></div>
+
+    <dialog class="admin-dialog" id="marketReasonDialog">
+      <form method="dialog" class="admin-dialog-form" id="marketReasonForm">
+        <h2 id="marketReasonTitle">交易监管</h2>
+        <p class="admin-dialog-note" id="marketReasonNote"></p>
+        <label>
+          原因（必填，计入审计）
+          <input id="marketReasonValue" type="text" maxlength="100" required />
+        </label>
+        <p class="admin-gate-error" id="marketReasonError" role="alert" hidden></p>
+        <div class="admin-dialog-actions">
+          <button type="button" class="button secondary" id="marketReasonCancel">取消</button>
+          <button type="submit" class="button primary" id="marketReasonSubmit">确认执行</button>
+        </div>
+      </form>
+    </dialog>
+
     <script src="admin.js"></script>
   </body>
 </html>

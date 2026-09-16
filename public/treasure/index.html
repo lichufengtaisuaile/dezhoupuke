@@ -28,9 +28,28 @@
       <main class="treasure-shell">
         <nav class="treasure-tabs" aria-label="头像宝箱功能">
           <button type="button" data-tab="open" aria-pressed="true"><i data-lucide="package-open"></i>开箱</button>
+          <button type="button" data-tab="gallery" aria-pressed="false"><i data-lucide="book-image"></i>图鉴</button>
           <button type="button" data-tab="inventory" aria-pressed="false"><i data-lucide="archive"></i>我的库存<span id="inventoryCount" hidden></span></button>
           <button type="button" data-tab="market" aria-pressed="false"><i data-lucide="store"></i>交易行<span id="listingCount" hidden></span></button>
         </nav>
+
+        <section class="treasure-panel" data-panel="gallery" hidden>
+          <div class="collection-heading">
+            <div><h1>头像图鉴</h1><p>点亮你收集过的每一款头像，点开头像查看市场行情。</p></div>
+            <div class="market-tools">
+              <div class="gallery-filters" role="group" aria-label="图鉴筛选">
+                <button type="button" data-gallery-filter="all" aria-pressed="true">全部</button>
+                <button type="button" data-gallery-filter="owned" aria-pressed="false">已获得</button>
+                <button type="button" data-gallery-filter="missing" aria-pressed="false">未获得</button>
+              </div>
+              <label>系列
+                <select id="gallerySeries"><option value="">全部系列</option></select>
+              </label>
+            </div>
+          </div>
+          <div class="gallery-progress" id="galleryProgress"></div>
+          <div class="gallery-grid" id="galleryGrid"></div>
+        </section>
 
         <section class="treasure-panel" data-panel="open">
           <div class="opening-layout">
@@ -54,11 +73,11 @@
                 </div>
                 <button class="open-button" id="openButton" type="button">
                   <span><i data-lucide="key-round"></i>开启宝箱</span>
-                  <strong>5,000 筹码</strong>
+                  <strong>5K 筹码</strong>
                 </button>
                 <button class="open-button ten-open-button" id="tenOpenButton" type="button">
                   <span><i data-lucide="layers-3"></i>十连开启</span>
-                  <strong>50,000 筹码</strong>
+                  <strong>50K 筹码</strong>
                 </button>
                 <button class="skip-button" id="skipButton" type="button" hidden>跳过动画</button>
               </div>
@@ -92,12 +111,13 @@
             <div><h1>我的头像库存</h1><p>同款头像可以持有多份；出售最后一份后将失去使用权。</p></div>
             <button type="button" class="button secondary" id="refreshInventory"><i data-lucide="refresh-cw"></i>刷新库存</button>
           </div>
+          <div class="showcase-strip" id="showcaseStrip" hidden></div>
           <div class="inventory-grid" id="inventoryGrid"></div>
         </section>
 
         <section class="treasure-panel" data-panel="market" hidden>
           <div class="market-heading">
-            <div><h1>玩家交易行</h1><p>头像由玩家定价，成交后系统从卖家收入中收取 10% 手续费。</p></div>
+            <div><h1>玩家交易行</h1><p>头像由玩家定价；上架收取售价 1% 上架费，成交再收 9% 手续费，7 天未成交自动下架。</p></div>
             <div class="market-tools">
               <label>系列
                 <select id="marketSeries"><option value="">全部系列</option></select>
@@ -119,8 +139,8 @@
       <div class="trade-item" id="sellItem"></div>
       <form id="sellForm" class="home-dialog-form">
         <label for="sellPrice">出售价格</label>
-        <div class="trade-price-input"><i data-lucide="coins"></i><input id="sellPrice" type="number" min="1000" max="10000000" step="100" inputmode="numeric" required /><span>筹码</span></div>
-        <div class="trade-breakdown"><span>成交手续费 10%</span><strong id="sellerReceives">预计到账 —</strong></div>
+        <div class="trade-price-input"><i data-lucide="coins"></i><input id="sellPrice" type="number" min="1000" step="100" inputmode="numeric" required /><span>筹码</span></div>
+        <div class="trade-breakdown"><span>上架费 1%（立即收取，过期不退）· 成交手续费 9%</span><strong id="sellerReceives">预计到账 —</strong></div>
         <p class="home-dialog-error" id="sellError" role="alert" hidden></p>
         <div class="home-dialog-actions">
           <button type="button" class="button secondary" data-close-dialog>取消</button>

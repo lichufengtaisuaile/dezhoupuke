@@ -1,5 +1,19 @@
 "use strict";
 
+function compactNumber(value) {
+  const num = Number(value || 0);
+  if (Math.abs(num) >= 1000000) {
+    const m = num / 1000000;
+    return `${m >= 100 ? Math.round(m) : Math.round(m * 10) / 10}M`;
+  }
+  if (Math.abs(num) >= 1000) {
+    const k = num / 1000;
+    return `${k >= 100 ? Math.round(k) : Math.round(k * 10) / 10}K`;
+  }
+  return num.toLocaleString("zh-CN");
+}
+"use strict";
+
 // 管理后台：令牌存 sessionStorage，调 GET /api/admin/users 成功即视为有效。
 (() => {
   const TOKEN_KEY = "dezhou-admin-token";
@@ -38,6 +52,21 @@
     auditCount: $("auditCount"),
     auditPager: $("auditPager"),
     usersPager: $("usersPager"),
+    marketBody: $("marketBody"),
+    marketEmpty: $("marketEmpty"),
+    marketCount: $("marketCount"),
+    marketPager: $("marketPager"),
+    marketSearch: $("marketSearch"),
+    marketStatus: $("marketStatus"),
+    marketRefresh: $("marketRefresh"),
+    marketReasonDialog: $("marketReasonDialog"),
+    marketReasonForm: $("marketReasonForm"),
+    marketReasonTitle: $("marketReasonTitle"),
+    marketReasonNote: $("marketReasonNote"),
+    marketReasonValue: $("marketReasonValue"),
+    marketReasonError: $("marketReasonError"),
+    marketReasonCancel: $("marketReasonCancel"),
+    marketReasonSubmit: $("marketReasonSubmit"),
     adjustDialog: $("adjustDialog"),
     adjustForm: $("adjustForm"),
     adjustTarget: $("adjustTarget"),
@@ -59,13 +88,15 @@
   let searchTimer = null;
   let usersCurrentPage = 1;
   let auditCurrentPage = 1;
+  let marketCurrentPage = 1;
+  let marketAction = null;
   let adjustUserId = null;
   let passwordUserId = null;
   let broadcastRequestId = null;
   let toastTimer = null;
 
   function fmtMoney(value) {
-    return Number(value || 0).toLocaleString("zh-CN");
+    return compactNumber(value);
   }
   function fmtTime(value) {
     const date = new Date(Number(value) || 0);
@@ -136,7 +167,7 @@
       sessionStorage.setItem(TOKEN_KEY, token);
       showPanel();
       startNpcPolling();
-      await Promise.all([loadUsers(), loadAudit(1), loadNpcTables(), loadBroadcastRecipients()]);
+      await Promise.all([loadUsers(), loadAudit(1), loadNpcTables(), loadBroadcastRecipients(), loadMarket(1)]);
     } catch (error) {
       sessionStorage.removeItem(TOKEN_KEY);
       token = "";
@@ -447,7 +478,7 @@
   }
 
   // ---------- 审计日志 ----------
-  const ACTION_NAMES = { ADJUST_BALANCE: "调资金", BROADCAST_GRANT: "全服发放", BAN: "封禁", UNBAN: "解封", RESET_PASSWORD: "重置密码" };
+  const ACTION_NAMES = { ADJUST_BALANCE: "调资金", BROADCAST_GRANT: "全服发放", BAN: "封禁", UNBAN: "解封", RESET_PASSWORD: "重置密码", MARKET_FORCE_DELIST: "强制下架", MARKET_REVERT_TRADE: "撤回交易" };
   function auditText(entry) {
     const detail = entry.detail || {};
     if (entry.action === "ADJUST_BALANCE") {
@@ -480,6 +511,100 @@
     }
   }
 
+  // ---------- 交易行监管 ----------
+  const MARKET_STATUS_NAMES = { ACTIVE: "在售", SOLD: "已成交", CANCELLED: "已下架", EXPIRED: "已过期", REVERTED: "已撤回" };
+
+  async function loadMarket(page = 1) {
+    try {
+      const params = new URLSearchParams({ page });
+      if (elements.marketStatus.value) params.set("status", elements.marketStatus.value);
+      const keyword = elements.marketSearch.value.trim();
+      if (keyword) params.set("q", keyword);
+      const data = await adminApi(`/api/admin/market?${params}`);
+      marketCurrentPage = data.page;
+      elements.marketCount.textContent = `共 ${data.total} 条`;
+      elements.marketEmpty.hidden = data.total > 0;
+      elements.marketBody.innerHTML = data.listings.map((listing) => {
+        const actions = [];
+        if (listing.status === "ACTIVE") {
+          actions.push(`<button type="button" class="admin-mini-button is-danger" data-market-delist="${esc(listing.id)}">强制下架</button>`);
+        }
+        if (listing.status === "SOLD") {
+          actions.push(`<button type="button" class="admin-mini-button is-danger" data-market-revert="${esc(listing.id)}">撤回交易</button>`);
+        }
+        return `
+        <tr>
+          <td>${esc(listing.avatarId)}</td>
+          <td>${fmtMoney(listing.price)}</td>
+          <td>${esc(listing.sellerName)}</td>
+          <td>${esc(listing.buyerName || "—")}</td>
+          <td>${MARKET_STATUS_NAMES[listing.status] || esc(listing.status)}</td>
+          <td>${fmtTime(listing.createdAt)}</td>
+          <td class="admin-market-actions">${actions.join("") || "—"}</td>
+        </tr>`;
+      }).join("");
+      renderPager(elements.marketPager, { page: data.page, pageSize: data.pageSize, total: data.total, onPage: loadMarket });
+    } catch (error) {
+      toast(error.message, true);
+    }
+  }
+
+  function openMarketReasonDialog(action, listingId) {
+    marketAction = { action, listingId };
+    elements.marketReasonTitle.textContent = action === "delist" ? "强制下架商品" : "撤回已成交交易";
+    elements.marketReasonNote.textContent = action === "delist"
+      ? "头像将退回卖家，已收取的上架费不退回。请填写下架原因（计入审计）。"
+      : "买家将原路收到全额退款，头像被系统回收，卖家已到账收入会被扣回（余额不足时扣到 0）。请填写撤回原因（计入审计）。";
+    elements.marketReasonValue.value = "";
+    elements.marketReasonError.hidden = true;
+    elements.marketReasonSubmit.textContent = action === "delist" ? "确认强制下架" : "确认撤回交易";
+    elements.marketReasonDialog.showModal();
+    elements.marketReasonValue.focus();
+  }
+
+  elements.marketBody.addEventListener("click", (event) => {
+    const delist = event.target.closest("[data-market-delist]");
+    const revert = event.target.closest("[data-market-revert]");
+    if (delist) openMarketReasonDialog("delist", delist.dataset.marketDelist);
+    if (revert) openMarketReasonDialog("revert", revert.dataset.marketRevert);
+  });
+  elements.marketSearch.addEventListener("input", () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => loadMarket(1), 300);
+  });
+  elements.marketStatus.addEventListener("change", () => loadMarket(1));
+  elements.marketRefresh.addEventListener("click", () => loadMarket(marketCurrentPage));
+  elements.marketReasonCancel.addEventListener("click", () => {
+    marketAction = null;
+    elements.marketReasonDialog.close();
+  });
+  elements.marketReasonForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!marketAction) return;
+    const reason = elements.marketReasonValue.value.trim();
+    if (!reason) {
+      elements.marketReasonError.textContent = "请填写原因";
+      elements.marketReasonError.hidden = false;
+      return;
+    }
+    elements.marketReasonSubmit.disabled = true;
+    try {
+      await adminApi(`/api/admin/market/${encodeURIComponent(marketAction.listingId)}/${marketAction.action === "delist" ? "delist" : "revert"}`, {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+      });
+      toast(marketAction.action === "delist" ? "已强制下架" : "已撤回交易");
+      marketAction = null;
+      elements.marketReasonDialog.close();
+      await Promise.all([loadMarket(marketCurrentPage), loadAudit(1)]);
+    } catch (error) {
+      elements.marketReasonError.textContent = error.message;
+      elements.marketReasonError.hidden = false;
+    } finally {
+      elements.marketReasonSubmit.disabled = false;
+    }
+  });
+
   // ---------- 启动 ----------
   (async () => {
     if (!token) { showGate(); return; }
@@ -487,7 +612,7 @@
       await adminApi("/api/admin/users?page=1");
       showPanel();
       startNpcPolling();
-      await Promise.all([loadUsers(), loadAudit(1), loadNpcTables(), loadBroadcastRecipients()]);
+      await Promise.all([loadUsers(), loadAudit(1), loadNpcTables(), loadBroadcastRecipients(), loadMarket(1)]);
     } catch (error) {
       sessionStorage.removeItem(TOKEN_KEY);
       token = "";

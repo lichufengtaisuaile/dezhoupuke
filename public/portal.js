@@ -1,3 +1,17 @@
+"use strict";
+
+function compactNumber(value) {
+  const num = Number(value || 0);
+  if (Math.abs(num) >= 1000000) {
+    const m = num / 1000000;
+    return `${m >= 100 ? Math.round(m) : Math.round(m * 10) / 10}M`;
+  }
+  if (Math.abs(num) >= 1000) {
+    const k = num / 1000;
+    return `${k >= 100 ? Math.round(k) : Math.round(k * 10) / 10}K`;
+  }
+  return num.toLocaleString("zh-CN");
+}
 (() => {
   "use strict";
 
@@ -47,7 +61,7 @@
     const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
       "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
     })[char]);
-    const number = (value) => Number(value || 0).toLocaleString("zh-CN");
+    const number = compactNumber;
     const icon = (name) => `<i data-lucide="${name}" aria-hidden="true"></i>`;
     const icons = () => window.lucide?.createIcons();
     const get = (name) => root.querySelector(`[data-portal="${name}"]`);

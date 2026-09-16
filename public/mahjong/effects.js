@@ -238,7 +238,9 @@
       const box = rect(target);
       if (!box) return;
       const node = transient(`mj-fx-chips${command.delta < 0 ? " is-loss" : ""}`);
-      node.textContent = `${command.delta > 0 ? "+" : "−"}${Math.abs(command.delta).toLocaleString("zh-CN")}`;
+      const abs = Math.abs(command.delta);
+      const compact = abs >= 1000000 ? `${Math.round(abs / 100000) / 10}M` : abs >= 1000 ? `${Math.round(abs / 100) / 10}K` : abs.toLocaleString("zh-CN");
+      node.textContent = `${command.delta > 0 ? "+" : "−"}${compact}`;
       node.style.left = `${box.cx}px`;
       node.style.top = `${box.y - 4}px`;
       play(node, [

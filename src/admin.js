@@ -2,6 +2,7 @@ import { GameError, requireThat } from './errors.js';
 import { credit, balanceOf } from './wallet.js';
 import { hasMahjongTable, tableAssets } from './stats.js';
 import { resetPassword as resetAccountPassword } from './account.js';
+import { adminForceDelist, adminRevertTrade } from './treasure.js';
 
 export const ADMIN_PAGE_SIZE = 20;
 const AUDIT_ADMIN = 'token';
@@ -184,6 +185,66 @@ export function resetPassword(db, accountId, password) {
     });
     return { ...result, auditId };
   })();
+}
+
+// ---------- 交易行监管 ----------
+
+const MARKET_SELECT = `SELECT l.id, l.status, l.price, l.fee, l.created_at AS createdAt, l.settled_at AS settledAt,
+    i.avatar_id AS avatarId, seller.name AS sellerName, buyer.name AS buyerName
+  FROM avatar_market_listings l
+  JOIN avatar_items i ON i.id = l.item_id
+  JOIN accounts seller ON seller.id = l.seller_account_id
+  LEFT JOIN accounts buyer ON buyer.id = l.buyer_account_id`;
+
+// 交易监管列表：ACTIVE 正序在前，SOLD/其他按时间倒序，可按状态与关键词过滤。
+export function marketPage(db, { status = '', q = '', page = 1 } = {}) {
+  const current = Number.isSafeInteger(page) && page >= 1 ? page : 1;
+  const keyword = typeof q === 'string' ? q.trim() : '';
+  const clauses = [];
+  const args = [];
+  if (['ACTIVE', 'SOLD', 'CANCELLED', 'EXPIRED', 'REVERTED'].includes(status)) {
+    clauses.push('l.status = ?');
+    args.push(status);
+  }
+  if (keyword) {
+    clauses.push("(seller.name LIKE ? ESCAPE '\\' OR buyer.name LIKE ? ESCAPE '\\' OR i.avatar_id LIKE ? ESCAPE '\\')");
+    const like = `%${keyword.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+    args.push(like, like, like);
+  }
+  const clause = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+  const total = db.prepare(`SELECT COUNT(*) AS count FROM avatar_market_listings l
+    JOIN avatar_items i ON i.id = l.item_id
+    JOIN accounts seller ON seller.id = l.seller_account_id
+    LEFT JOIN accounts buyer ON buyer.id = l.buyer_account_id ${clause}`).get(...args).count;
+  const rows = db.prepare(`${MARKET_SELECT} ${clause}`).all(...args);
+  const order = { ACTIVE: 0, SOLD: 1, EXPIRED: 2, CANCELLED: 3, REVERTED: 4 };
+  rows.sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9) || b.createdAt - a.createdAt);
+  const pageCount = Math.max(1, Math.ceil(total / ADMIN_PAGE_SIZE));
+  const resolvedPage = Math.min(current, pageCount);
+  const offset = (resolvedPage - 1) * ADMIN_PAGE_SIZE;
+  return {
+    page: resolvedPage,
+    pageSize: ADMIN_PAGE_SIZE,
+    total,
+    listings: rows.slice(offset, offset + ADMIN_PAGE_SIZE),
+  };
+}
+
+export function forceDelist(db, listingId, reason) {
+  const result = adminForceDelist(db, listingId, reason);
+  const auditId = writeAudit(db, 'MARKET_FORCE_DELIST', result.sellerId, {
+    listingId, avatarId: result.avatar?.id ?? null, reason: result.reason,
+  });
+  return { ...result, auditId };
+}
+
+export function revertTrade(db, listingId, reason) {
+  const result = adminRevertTrade(db, listingId, reason);
+  const auditId = writeAudit(db, 'MARKET_REVERT_TRADE', result.buyerId, {
+    listingId, avatarId: result.avatar?.id ?? null, reason: result.reason,
+    refunded: result.refunded, sellerClawback: result.sellerClawback,
+  });
+  return { ...result, auditId };
 }
 
 // ---------- 审计日志 ----------

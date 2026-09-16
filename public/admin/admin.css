@@ -252,3 +252,8 @@
 @media (max-width: 680px) {
   .admin-npc-form input, .admin-npc-form select { width: 84px; }
 }
+
+/* ---------- 交易行监管 ---------- */
+.admin-mini-button { min-height: 28px; padding: 3px 10px; font-size: 11px; border-radius: 8px; border: 1px solid #4d7a5e; background: transparent; color: inherit; cursor: pointer; }
+.admin-mini-button.is-danger { border-color: #6d3a3d; background: #3a2426; color: #efa2a5; }
+.admin-market-actions { white-space: nowrap; }

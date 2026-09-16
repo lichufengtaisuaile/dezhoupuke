@@ -630,3 +630,11 @@ button.portal-game:hover { border-color: #728679; background: #252d2c; }
   .avatar-selection-preview > img { width: 68px; height: 68px; }
   .avatar-option img { width: 60px; }
 }
+
+/* ---------- 排行榜头像与收藏称号 ---------- */
+.profile-board-avatar { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 1px solid #2c3833; }
+.profile-board-title { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 99px; background: #c9a44c22; color: var(--gold); font-style: normal; font-size: 10px; vertical-align: 1px; }
+.profile-board-collection { flex-shrink: 0; color: #7d8f83; font-size: 11px; font-variant-numeric: tabular-nums; }
+.profile-collection-title { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 99px; background: #c9a44c22; color: var(--gold); font-style: normal; font-size: 11px; }
+.profile-showcase { display: flex; gap: 10px; margin: 4px 0 2px; }
+.profile-showcase img { width: 56px; height: 56px; border-radius: 12px; object-fit: cover; border: 1px solid #2c3833; }

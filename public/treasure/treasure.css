@@ -601,3 +601,55 @@ body {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }
+
+/* ---------- 头像图鉴 ---------- */
+.gallery-filters { display: inline-flex; gap: 0; border: 1px solid var(--line, #2a342e); border-radius: 10px; overflow: hidden; }
+.gallery-filters button { border: 0; background: transparent; color: inherit; padding: 8px 14px; font-size: 13px; cursor: pointer; }
+.gallery-filters button[aria-pressed="true"] { background: var(--accent, #35c26e); color: #0c120e; font-weight: 600; }
+.gallery-progress { display: flex; align-items: center; gap: 14px; margin: 4px 0 16px; }
+.gallery-progress-bar { flex: 1; max-width: 420px; height: 8px; border-radius: 99px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.gallery-progress-bar span { display: block; height: 100%; border-radius: 99px; background: var(--accent, #35c26e); }
+.gallery-progress p { margin: 0; font-size: 13px; opacity: 0.85; }
+.gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
+.gallery-card { border: 1px solid var(--line, #2a342e); border-radius: 12px; overflow: hidden; background: rgba(255, 255, 255, 0.03); }
+.gallery-card-image { position: relative; aspect-ratio: 1; background: #141a16; }
+.gallery-card-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gallery-card-image img.is-silhouette { filter: grayscale(1) brightness(0.42) contrast(0.9); opacity: 0.85; }
+.gallery-card.is-missing .gallery-card-body { opacity: 0.75; }
+.gallery-card-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 4px; }
+.gallery-card-body h2 { margin: 0; font-size: 15px; }
+.gallery-market { margin: 6px 0 0; display: flex; flex-direction: column; gap: 3px; }
+.gallery-market div { display: flex; justify-content: space-between; font-size: 12px; }
+.gallery-market dt { opacity: 0.6; }
+.gallery-market dd { margin: 0; font-weight: 600; }
+
+/* ---------- 收藏展柜 ---------- */
+.showcase-strip { border: 1px solid var(--line, #2a342e); border-radius: 12px; padding: 12px 14px; margin-bottom: 16px; background: rgba(255, 255, 255, 0.03); }
+.showcase-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.showcase-head span { font-size: 12px; opacity: 0.65; flex: 1; }
+.showcase-slots { display: flex; gap: 12px; }
+.showcase-slot { position: relative; width: 88px; margin: 0; text-align: center; }
+.showcase-slot img { width: 88px; height: 88px; border-radius: 12px; object-fit: cover; display: block; border: 1px solid var(--line, #2a342e); }
+.showcase-slot figcaption { font-size: 12px; margin-top: 5px; }
+.showcase-slot.is-empty { height: 88px; border: 1px dashed rgba(255, 255, 255, 0.25); border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; opacity: 0.6; }
+.showcase-remove { position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 50%; border: 0; background: #c0392b; color: #fff; cursor: pointer; font-size: 13px; line-height: 1; }
+.showcase-pick { margin-top: 12px; }
+.showcase-pick p { margin: 0 0 8px; font-size: 12px; opacity: 0.7; }
+.showcase-pick-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.showcase-pick-button { display: flex; align-items: center; gap: 6px; border: 1px solid var(--line, #2a342e); border-radius: 99px; background: transparent; color: inherit; padding: 4px 10px 4px 4px; cursor: pointer; font-size: 12px; }
+.showcase-pick-button img { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; }
+
+/* ---------- 市场参考价与高价提示 ---------- */
+.market-ref { margin: 4px 0 0; font-size: 12px; opacity: 0.75; }
+.market-overpriced { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 99px; background: rgba(220, 80, 60, 0.18); color: #ff8a75; font-style: normal; font-size: 11px; }
+.buy-warning.is-warning { color: #ffb84d; }
+
+@media (max-width: 640px) {
+  .gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .gallery-filters { width: 100%; }
+  .gallery-filters button { flex: 1; }
+  .showcase-slot, .showcase-slot img { width: 74px; height: 74px; }
+}
+
+.showcase-toggle { min-height: 30px; padding: 4px 14px; border-radius: 8px; border: 1px solid #4a594f; background: #242e28; color: #d5e0d8; cursor: pointer; font-size: 12px; flex-shrink: 0; }
+.showcase-toggle:hover { border-color: #83724d; color: #f2d895; }

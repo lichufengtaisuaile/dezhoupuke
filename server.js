@@ -140,6 +140,10 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
     try { res.json({ ok: true, entries: stats.leaderboard(db, rooms, 50) }); }
     catch (error) { apiError(res, error); }
   });
+  app.get('/api/leaderboard/collection', (_req, res) => {
+    try { res.json({ ok: true, entries: stats.collectionLeaderboard(db, 50) }); }
+    catch (error) { apiError(res, error); }
+  });
   app.get('/api/me/overview', (req, res) => {
     const account = bearerAccount(req, res);
     if (!account) return;
@@ -216,6 +220,24 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
     const account = bearerAccount(req, res);
     if (!account) return;
     try { res.json({ ok: true, ...treasure.marketHistory(db, account.id, Number(req.query.limit ?? 50)) }); }
+    catch (error) { apiError(res, error); }
+  });
+  app.get('/api/me/avatar-gallery', (req, res) => {
+    const account = bearerAccount(req, res);
+    if (!account) return;
+    try { res.json({ ok: true, ...treasure.gallery(db, account.id) }); }
+    catch (error) { apiError(res, error); }
+  });
+  app.get('/api/me/showcase', (req, res) => {
+    const account = bearerAccount(req, res);
+    if (!account) return;
+    try { res.json({ ok: true, ...treasure.showcase(db, account.id) }); }
+    catch (error) { apiError(res, error); }
+  });
+  app.post('/api/me/showcase', (req, res) => {
+    const account = bearerAccount(req, res);
+    if (!account) return;
+    try { res.json({ ok: true, ...treasure.setShowcase(db, account.id, req.body?.avatarIds) }); }
     catch (error) { apiError(res, error); }
   });
   app.get('/api/me/hands', (req, res) => {
@@ -316,6 +338,26 @@ export async function createPokerServer({ port = 0, host = '127.0.0.1', turnTime
       const page = Number(req.query.page ?? 1);
       res.json({ ok: true, ...adminOps.auditPage(db, page) });
     } catch (error) { apiError(res, error); }
+  });
+  app.get('/api/admin/market', (req, res) => {
+    if (!bearerAdmin(req, res)) return;
+    try {
+      res.json({ ok: true, ...adminOps.marketPage(db, {
+        status: req.query.status ?? '',
+        q: req.query.q ?? '',
+        page: Number(req.query.page ?? 1),
+      }) });
+    } catch (error) { apiError(res, error); }
+  });
+  app.post('/api/admin/market/:id/delist', (req, res) => {
+    if (!bearerAdmin(req, res)) return;
+    try { res.json({ ok: true, ...adminOps.forceDelist(db, req.params.id, req.body?.reason) }); }
+    catch (error) { apiError(res, error); }
+  });
+  app.post('/api/admin/market/:id/revert', (req, res) => {
+    if (!bearerAdmin(req, res)) return;
+    try { res.json({ ok: true, ...adminOps.revertTrade(db, req.params.id, req.body?.reason) }); }
+    catch (error) { apiError(res, error); }
   });
   // 氛围桌（NPC 常驻桌）管理：配置增删改后立即触发一次 heal，不等下个巡检周期。
   app.get('/api/admin/npc-tables', (req, res) => {
